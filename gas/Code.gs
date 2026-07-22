@@ -166,16 +166,23 @@ function actionInit_(body) {
   var userId = body.userId;
   if (!userId) return { ok: false, error: 'userId がありません。' };
   var u = findUser_(userId);
-  var registered = !!(u && truthy_(u['有効']));
+  if (!u) {
+    // 初回アクセス時は LINE名で自動登録（管理者が後で名前を変更できる）
+    var nm = String(body.displayName || '');
+    sheet_(SH.users).appendRow([userId, nm, true, nowStr_(), false]);
+    u = findUser_(userId);
+  }
+  var active = truthy_(u['有効']);
   var res = {
     ok: true,
-    registered: registered,
-    name: u ? String(u['名前'] || '') : '',
+    registered: active,               // 有効なら予約可
+    blocked: !active,                 // 無効化された人は予約不可
+    name: String(u['名前'] || body.displayName || ''),
     userId: String(userId),
-    isAdmin: !!(u && truthy_(u['管理者'])),
+    isAdmin: !!truthy_(u['管理者']),
     rules: getRules_()
   };
-  if (registered) {
+  if (active) {
     res.myReservation = reservationOut_(findResv_(userId));
     res.slots = availableSlots_(userId);
   }
@@ -272,8 +279,10 @@ function adminList_() {
       return { slotId: String(s['枠ID']), date: _d, time: _t, active: truthy_(s['有効']), taken: !!taken[String(s['枠ID'])], past: isPast_(_d, _t) };
     }),
     reservations: rows_(SH.resv).map(function (r) {
+      var ru = findUser_(r.userId);
+      var rname = ru ? String(ru['名前'] || '') : String(r['名前'] || '');
       return {
-        userId: String(r.userId), name: String(r['名前'] || ''), slotId: String(r['枠ID']),
+        userId: String(r.userId), name: rname, slotId: String(r['枠ID']),
         date: fmtDateCell_(r['日付']), time: fmtTimeCell_(r['時間']), remarks: String(r['備考'] || ''),
         status: String(r['ステータス'] || ''), receivedAt: String(r['受付日時'] || ''), updatedAt: String(r['更新日時'] || '')
       };

@@ -125,7 +125,7 @@
 
   async function refresh() {
     setStatus("読み込み中…");
-    const data = await api({ action: "init", userId: PROFILE.userId, idToken: liff.getIDToken() });
+    const data = await api({ action: "init", userId: PROFILE.userId, displayName: PROFILE.displayName, idToken: liff.getIDToken() });
     if (!data.ok) { setStatus("エラー: " + (data.error || "不明"), "err"); return; }
     STATE = data;
 
@@ -133,10 +133,11 @@
     if (data.rules) { $("rules").textContent = data.rules; $("rulesCard").classList.remove("d-none"); }
 
     if (!data.registered) {
-      $("dispName").textContent = PROFILE.displayName || "";
-      $("dispSub").textContent = "未登録";
+      // 有効フラグが外された（管理者が利用停止した）場合のみここに来る
+      $("dispName").textContent = data.name || PROFILE.displayName || "";
+      $("dispSub").textContent = "利用停止中";
       $("profile").classList.remove("d-none"); $("profile").classList.add("d-flex");
-      setStatus("あなたはまだ予約できる状態ではありません。\n下のユーザーIDを管理者に伝えて登録を依頼してください。\n\nユーザーID: " + PROFILE.userId, "err");
+      setStatus("現在ご利用いただけません。お手数ですが管理者にお問い合わせください。", "err");
       return;
     }
 
