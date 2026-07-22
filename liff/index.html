@@ -91,13 +91,15 @@
     }
     try {
       setStatus("LIFF 初期化中…");
-      // 外部ブラウザでも自動でログインを処理させ、無限ループを防ぐ
-      await liff.init({ liffId: CONFIG.LIFF_ID, withLoginOnExternalBrowser: true });
+      await liff.init({ liffId: CONFIG.LIFF_ID });
 
       if (!liff.isLoggedIn()) {
-        // redirectUri を現在URLに固定してループを防止（liff.state の欠落対策）
         setStatus("LINEログインへ移動します…");
-        liff.login({ redirectUri: window.location.href });
+        // redirectUri はクエリを含まないクリーンなURLに固定する。
+        // window.location.href をそのまま使うと liff.state / code が積み重なり
+        // "URI too long" (414) になるため。
+        var cleanUri = window.location.origin + window.location.pathname;
+        liff.login({ redirectUri: cleanUri });
         return;
       }
 
