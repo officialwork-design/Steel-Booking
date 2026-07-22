@@ -15,6 +15,9 @@
  *   発行される /exec URL を liff・admin の GAS_ENDPOINT に設定する。
  */
 
+// SHEET_ID はスクリプトプロパティが優先。未設定ならこの既定値を使う。
+var DEFAULT_SHEET_ID = '1neHxod-oOulSHjkbd41hoZ9emkkJPtHvvaQgO6wNvoE';
+
 var HEADERS = ['受付番号', '受付日時', 'userId', '表示名', 'ライン名', '希望日', '希望時間', '備考', 'ステータス'];
 
 function prop_(key, fallback) {
@@ -23,7 +26,7 @@ function prop_(key, fallback) {
 }
 
 function getSheet_() {
-  var id = prop_('SHEET_ID', '');
+  var id = prop_('SHEET_ID', DEFAULT_SHEET_ID);
   if (!id) throw new Error('スクリプトプロパティ SHEET_ID が未設定です。');
   var ss = SpreadsheetApp.openById(id);
   var name = prop_('SHEET_NAME', '予約');
