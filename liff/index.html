@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>スチール予約</title>
+<style>
+  :root { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; }
+  body { margin: 0; padding: 24px; line-height: 1.7; color: #1a1a1a; }
+  .card { max-width: 480px; margin: 0 auto; }
+  h1 { font-size: 1.25rem; margin: 0 0 16px; }
+  .status { padding: 12px 14px; border-radius: 10px; background: #f4f4f5; font-size: .95rem; white-space: pre-wrap; word-break: break-word; }
+  .status.ok { background: #e7f6ec; }
+  .status.err { background: #fdeaea; }
+  .profile { display: none; align-items: center; gap: 12px; margin: 20px 0; }
+  .profile img { width: 56px; height: 56px; border-radius: 50%; }
+  .profile .name { font-weight: 600; }
+  button { width: 100%; padding: 14px; font-size: 1rem; border: 0; border-radius: 10px; background: #06c755; color: #fff; font-weight: 600; margin-top: 12px; }
+  button:disabled { opacity: .5; }
+  .sub { font-size: .8rem; color: #888; margin-top: 8px; word-break: break-all; }
+  details { margin-top: 20px; font-size: .85rem; color: #555; }
+  pre { background: #f4f4f5; padding: 10px; border-radius: 8px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>スチール予約</h1>
+
+  <div id="status" class="status">読み込み中…</div>
+
+  <div id="profile" class="profile">
+    <img id="avatar" alt="">
+    <div>
+      <div class="name" id="displayName"></div>
+      <div class="sub" id="userId"></div>
+    </div>
+  </div>
+
+  <button id="pingBtn" disabled>GASに疎通テスト(ダミー)</button>
+  <div id="pingResult" class="sub"></div>
+
+  <details>
+    <summary>設定値(あとで書き換える2箇所)</summary>
+    <pre id="configView"></pre>
+    <p>LIFF ID と GAS_ENDPOINT を、このファイル冒頭の CONFIG で設定してください。</p>
+  </details>
+</div>
+
+<!-- LIFF SDK -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+  // ▼▼▼ あとで書き換えるのはこの2つだけ ▼▼▼
+  const CONFIG = {
+    LIFF_ID: "PUT_YOUR_LIFF_ID_HERE",        // 例: "1234567890-abcXYZ"
+    GAS_ENDPOINT: "PUT_YOUR_GAS_EXEC_URL_HERE" // 例: "https://script.google.com/macros/s/XXXX/exec"
+  };
+  // ▲▲▲ ここだけ ▲▲▲
+
+  const $ = (id) => document.getElementById(id);
+  const setStatus = (msg, kind) => {
+    const el = $("status");
+    el.textContent = msg;
+    el.className = "status" + (kind ? " " + kind : "");
+  };
+
+  $("configView").textContent = JSON.stringify(CONFIG, null, 2);
+
+  async function main() {
+    if (CONFIG.LIFF_ID === "PUT_YOUR_LIFF_ID_HERE") {
+      setStatus("LIFF_ID が未設定です。\nファイル冒頭の CONFIG.LIFF_ID を設定してください。", "err");
+      return;
+    }
+    try {
+      setStatus("LIFF 初期化中…");
+      await liff.init({ liffId: CONFIG.LIFF_ID });
+
+      if (!liff.isLoggedIn()) {
+        setStatus("LINEログインへ移動します…");
+        liff.login();
+        return;
+      }
+
+      const profile = await liff.getProfile();
+      $("avatar").src = profile.pictureUrl || "";
+      $("displayName").textContent = profile.displayName || "(名前なし)";
+      $("userId").textContent = profile.userId;
+      $("profile").style.display = "flex";
+
+      const inClient = liff.isInClient();
+      setStatus(
+        "ログインできました。\n" +
+        "実行環境: " + (inClient ? "LINEアプリ内" : "外部ブラウザ"),
+        "ok"
+      );
+
+      $("pingBtn").disabled = false;
+    } catch (e) {
+      setStatus("LIFF初期化エラー:\n" + (e && e.message ? e.message : e), "err");
+    }
+  }
+
+  // GASへの疎通テスト(ダミー)。
+  // 本番のアクション名・パラメータは後でGAS側に合わせて書き換える。
+  // CORS回避のため Content-Type は text/plain、JSONは文字列で body に載せる。
+  $("pingBtn").addEventListener("click", async () => {
+    const out = $("pingResult");
+    if (CONFIG.GAS_ENDPOINT === "PUT_YOUR_GAS_EXEC_URL_HERE") {
+      out.textContent = "GAS_ENDPOINT が未設定です。今はダミー段階なのでこのままでOK。";
+      return;
+    }
+    out.textContent = "送信中…";
+    try {
+      const idToken = liff.getIDToken(); // GAS側でLINEトークン検証する想定
+      const res = await fetch(CONFIG.GAS_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify({ action: "ping", idToken })
+      });
+      const text = await res.text();
+      out.textContent = "応答: " + text;
+    } catch (e) {
+      out.textContent = "疎通エラー: " + (e && e.message ? e.message : e);
+    }
+  });
+
+  main();
+</script>
+</body>
+</html>
