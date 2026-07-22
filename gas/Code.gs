@@ -219,30 +219,42 @@ function actionBook_(body) {
 
 /* ---------- 管理向け（要 ADMIN_KEY） ---------- */
 
-// LINEのidTokenを検証して userId(sub) を返す。不正なら null。
+// LINEのidTokenを検証して {ok, userId} または {ok:false, error} を返す。
 function verifyLineUser_(idToken) {
-  if (!idToken) return null;
+  if (!idToken) return { ok: false, error: 'idTokenがありません' };
+  var res;
   try {
-    var res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
+    res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
       method: 'post',
       payload: { id_token: idToken, client_id: CHANNEL_ID },
       muteHttpExceptions: true
     });
-    var data = JSON.parse(res.getContentText());
-    if (data && data.sub && String(data.aud) === CHANNEL_ID) return String(data.sub);
-    return null;
   } catch (e) {
-    return null;
+    return { ok: false, error: '外部通信の権限が未承認の可能性: ' + e };
   }
+  var data;
+  try { data = JSON.parse(res.getContentText()); } catch (e) { return { ok: false, error: '応答解析失敗' }; }
+  if (data.error) return { ok: false, error: 'LINE: ' + data.error + ' ' + (data.error_description || '') };
+  if (!data.sub) return { ok: false, error: 'subが取得できません' };
+  if (String(data.aud) !== String(CHANNEL_ID)) return { ok: false, error: 'aud不一致(aud=' + data.aud + ')' };
+  return { ok: true, userId: String(data.sub) };
 }
 
 // 管理者本人であることを検証（idToken → 管理者フラグ）
 function requireAdmin_(idToken) {
-  var uid = verifyLineUser_(idToken);
-  if (!uid) return { ok: false, error: 'LINE認証に失敗しました。LINE内で開き直してください。' };
-  var u = findUser_(uid);
-  if (!u || !truthy_(u['管理者'])) return { ok: false, error: '管理者権限がありません。' };
-  return { ok: true, userId: uid };
+  var v = verifyLineUser_(idToken);
+  if (!v.ok) return { ok: false, error: '認証NG: ' + v.error };
+  var u = findUser_(v.userId);
+  if (!u || !truthy_(u['管理者'])) return { ok: false, error: '管理者権限がありません（あなたのuserId: ' + v.userId + '）' };
+  return { ok: true, userId: v.userId };
+}
+
+// ▼ 初回だけエディタから手動実行して権限を承認するための関数
+function 権限承認用() {
+  UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify',
+    { method: 'post', payload: { id_token: 'dummy', client_id: CHANNEL_ID }, muteHttpExceptions: true });
+  var n = SpreadsheetApp.openById(prop_('SHEET_ID', DEFAULT_SHEET_ID)).getName();
+  Logger.log('OK: ' + n);
 }
 
 function adminList_() {
