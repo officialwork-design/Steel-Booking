@@ -83,6 +83,18 @@ function nextSlotId_() {
   return max + 1;
 }
 
+function slotDateTime_(dateStr, timeStr) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ''));
+  if (!m) return null;
+  var t = /^(\d{1,2}):(\d{2})/.exec(String(timeStr || '00:00'));
+  var hh = t ? +t[1] : 23, mm = t ? +t[2] : 59;
+  return new Date(+m[1], +m[2] - 1, +m[3], hh, mm);
+}
+function isPast_(dateStr, timeStr) {
+  var d = slotDateTime_(dateStr, timeStr);
+  return d ? (d.getTime() < Date.now()) : false;
+}
+
 function truthy_(v) {
   if (v === true) return true;
   var s = String(v).trim().toLowerCase();
@@ -118,7 +130,10 @@ function takenSlotIds_(exceptUserId) {
 function availableSlots_(userId) {
   var taken = takenSlotIds_(userId);
   return rows_(SH.slots)
-    .filter(function (s) { return truthy_(s['有効']) && !taken[String(s['枠ID'])]; })
+    .filter(function (s) {
+      if (!truthy_(s['有効']) || taken[String(s['枠ID'])]) return false;
+      return !isPast_(fmtDateCell_(s['日付']), fmtTimeCell_(s['時間']));
+    })
     .map(function (s) {
       return { slotId: String(s['枠ID']), date: fmtDateCell_(s['日付']), time: fmtTimeCell_(s['時間']) };
     })
@@ -216,7 +231,8 @@ function adminList_() {
     }),
     slots: rows_(SH.slots).map(function (s) {
       var taken = takenSlotIds_(null);
-      return { slotId: String(s['枠ID']), date: fmtDateCell_(s['日付']), time: fmtTimeCell_(s['時間']), active: truthy_(s['有効']), taken: !!taken[String(s['枠ID'])] };
+      var _d = fmtDateCell_(s['日付']), _t = fmtTimeCell_(s['時間']);
+      return { slotId: String(s['枠ID']), date: _d, time: _t, active: truthy_(s['有効']), taken: !!taken[String(s['枠ID'])], past: isPast_(_d, _t) };
     }),
     reservations: rows_(SH.resv).map(function (r) {
       return {
@@ -294,6 +310,51 @@ function adminSaveRules_(b) {
   return { ok: true };
 }
 
+// 予約キャンセル（本人）
+function actionCancel_(body) {
+  var userId = body.userId;
+  if (!userId) return { ok: false, error: 'userId がありません。' };
+  var sh = sheet_(SH.resv);
+  var r = findResv_(userId);
+  if (r) sh.deleteRow(r._row);
+  return { ok: true };
+}
+
+// ステータス変更（管理）
+function adminSetStatus_(b) {
+  var sh = sheet_(SH.resv);
+  var r = findResv_(b.userId);
+  if (!r) return { ok: false, error: '予約が見つかりません。' };
+  sh.getRange(r._row, 7, 1, 1).setValue(String(b.status || '受付')); // 7列目=ステータス
+  return { ok: true };
+}
+
+// 期間で枠を一括追加（管理）
+function adminAddSlots_(b) {
+  if (!b.startDate || !b.endDate) return { ok: false, error: '開始日と終了日は必須です。' };
+  var times = [].concat(b.times || []).map(function (t) { return String(t).trim(); }).filter(Boolean);
+  if (!times.length) return { ok: false, error: '時間を1つ以上指定してください。' };
+  var start = slotDateTime_(b.startDate, '00:00'), end = slotDateTime_(b.endDate, '00:00');
+  if (!start || !end || start.getTime() > end.getTime()) return { ok: false, error: '日付の指定が不正です。' };
+  var sh = sheet_(SH.slots);
+  var existing = {};
+  rows_(SH.slots).forEach(function (s) { existing[fmtDateCell_(s['日付']) + ' ' + fmtTimeCell_(s['時間'])] = true; });
+  var id = nextSlotId_(), added = 0;
+  var cur = new Date(start.getTime());
+  while (cur.getTime() <= end.getTime()) {
+    var dstr = Utilities.formatDate(cur, 'Asia/Tokyo', 'yyyy-MM-dd');
+    for (var i = 0; i < times.length; i++) {
+      var tt = /^(\d{1,2}):(\d{2})/.exec(times[i]);
+      var tstr = tt ? (('0' + tt[1]).slice(-2) + ':' + tt[2]) : times[i];
+      if (existing[dstr + ' ' + tstr]) continue;
+      sh.appendRow([id, dstr, tstr, true, nowStr_()]);
+      existing[dstr + ' ' + tstr] = true; id++; added++;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return { ok: true, added: added };
+}
+
 /* ---------- ルーティング ---------- */
 
 var ADMIN_ACTIONS = {
@@ -303,12 +364,15 @@ var ADMIN_ACTIONS = {
   admin_saveSlot: adminSaveSlot_,
   admin_deleteSlot: adminDeleteSlot_,
   admin_deleteReservation: adminDeleteReservation_,
-  admin_saveRules: adminSaveRules_
+  admin_saveRules: adminSaveRules_,
+  admin_setStatus: adminSetStatus_,
+  admin_addSlots: adminAddSlots_
 };
 
 function route_(action, body) {
   if (action === 'init') return actionInit_(body);
   if (action === 'book') return actionBook_(body);
+  if (action === 'cancel') return actionCancel_(body);
   if (ADMIN_ACTIONS[action]) {
     var auth = adminAuth_(body.key);
     if (!auth.ok) return auth;

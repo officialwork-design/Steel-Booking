@@ -68,6 +68,16 @@
           <div class="col-md-3 d-grid"><button id="sSave" class="btn btn-primary">枠を追加</button></div>
         </div>
       </div></div>
+      <div class="card border-0 shadow-sm mb-3"><div class="card-body">
+        <div class="fw-semibold mb-2">期間でまとめて追加</div>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-3"><label class="form-label small mb-0">開始日</label><input id="bStart" type="date" class="form-control"></div>
+          <div class="col-md-3"><label class="form-label small mb-0">終了日</label><input id="bEnd" type="date" class="form-control"></div>
+          <div class="col-md-4"><label class="form-label small mb-0">時間（カンマ区切り）</label><input id="bTimes" class="form-control" placeholder="13:00,15:00,17:00"></div>
+          <div class="col-md-2 d-grid"><button id="bSave" class="btn btn-primary">一括追加</button></div>
+        </div>
+        <div class="form-text">指定期間の各日に、指定した時間の枠をまとめて作成します（既存の同一枠はスキップ）。</div>
+      </div></div>
       <div class="table-responsive card border-0 shadow-sm">
         <table class="table table-hover align-middle mb-0">
           <thead class="table-light"><tr><th>日付</th><th>時間</th><th>状態</th><th>有効</th><th></th></tr></thead>
@@ -125,7 +135,10 @@
   function renderResv(rows) {
     $("resvBody").innerHTML = rows.length ? rows.map(r => `<tr>
       <td>${esc(r.name)}</td><td>${esc(r.date)}</td><td>${esc(r.time)}</td>
-      <td>${esc(r.remarks)}</td><td><span class="badge text-bg-success">${esc(r.status)}</span></td>
+      <td>${esc(r.remarks)}</td>
+      <td><select class="form-select form-select-sm" style="min-width:90px" data-status-user="${esc(r.userId)}">
+        ${["受付","確定","完了"].map(o=>`<option ${r.status===o?"selected":""}>${o}</option>`).join("")}
+      </select></td>
       <td class="small text-muted">${esc(r.receivedAt)}</td>
       <td><button class="btn btn-sm btn-outline-danger" data-del-resv="${esc(r.userId)}">削除</button></td>
     </tr>`).join("") : '<tr><td colspan="7" class="text-center text-muted py-4">予約なし</td></tr>';
@@ -147,7 +160,7 @@
   function renderSlots(rows) {
     $("slotsBody").innerHTML = rows.length ? rows.map(s => `<tr>
       <td>${esc(s.date)}</td><td>${esc(s.time)}</td>
-      <td>${s.taken?'<span class="badge text-bg-warning">予約済み</span>':'<span class="badge text-bg-light border">空き</span>'}</td>
+      <td>${s.taken?'<span class="badge text-bg-warning">予約済み</span>':'<span class="badge text-bg-light border">空き</span>'}${s.past?' <span class="badge text-bg-secondary">過去</span>':''}</td>
       <td><span class="badge ${s.active?'text-bg-success':'text-bg-secondary'}">${s.active?'有効':'無効'}</span></td>
       <td>
         <button class="btn btn-sm btn-outline-secondary" data-toggle-slot="${esc(s.slotId)}" data-date="${esc(s.date)}" data-time="${esc(s.time)}" data-active="${s.active}">${s.active?'無効化':'有効化'}</button>
@@ -188,6 +201,24 @@
     const r = await post({ action:"admin_saveRules", text:$("rules").value });
     if (r.ok) { rm.textContent = "✅ 保存しました"; rm.className="small ms-2 text-success"; }
     else { rm.textContent = "❌ " + (r.error||"失敗"); rm.className="small ms-2 text-danger"; }
+  });
+
+  // 予約ステータス変更
+  document.addEventListener("change", async (e) => {
+    const t = e.target;
+    if (t.dataset.statusUser) {
+      const r = await post({ action:"admin_setStatus", userId:t.dataset.statusUser, status:t.value });
+      if (!r.ok) alert("❌ " + (r.error||"失敗"));
+    }
+  });
+
+  // 枠の一括追加
+  $("bSave").addEventListener("click", async () => {
+    const times = $("bTimes").value.split(",").map(x=>x.trim()).filter(Boolean);
+    if (!$("bStart").value || !$("bEnd").value || !times.length) { alert("開始日・終了日・時間を入力してください"); return; }
+    const r = await post({ action:"admin_addSlots", startDate:$("bStart").value, endDate:$("bEnd").value, times });
+    if (r.ok) { alert(`${r.added}件の枠を追加しました`); $("bTimes").value=""; load(); }
+    else alert("❌ " + (r.error||"失敗"));
   });
 </script>
 </body>

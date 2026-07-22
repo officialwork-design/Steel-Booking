@@ -49,6 +49,7 @@
       <div class="fw-semibold mb-2">✅ あなたの予約</div>
       <div id="currentInfo" class="mb-2"></div>
       <button id="editBtn" class="btn btn-outline-secondary btn-sm">予約を変更する</button>
+      <button id="cancelBtn" class="btn btn-outline-danger btn-sm ms-1">取り消す</button>
     </div>
   </div>
 
@@ -204,6 +205,15 @@
     const url = new URL("../admin/", window.location.href).href;
     if (window.liff && liff.openWindow) liff.openWindow({ url: url, external: true });
     else window.open(url, "_blank");
+  });
+
+  $("cancelBtn").addEventListener("click", async () => {
+    if (!confirm("予約を取り消しますか？この操作は元に戻せません。")) return;
+    try {
+      const d = await api({ action: "cancel", userId: PROFILE.userId, idToken: liff.getIDToken() });
+      if (d.ok) { setStatus("予約を取り消しました。もう一度予約できます。", "ok"); await refresh(); }
+      else alert("❌ " + (d.error || "取消に失敗しました"));
+    } catch (e) { alert("❌ 通信エラー: " + (e && e.message ? e.message : e)); }
   });
 
   $("bookingForm").addEventListener("submit", async (ev) => {
