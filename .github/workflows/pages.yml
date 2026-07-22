@@ -23,7 +23,7 @@ jobs:
           mkdir -p site
           [ -d liff ]  && cp -r liff  site/liff  || echo "liff/ なし → スキップ"
           [ -d admin ] && cp -r admin site/admin || echo "admin/ なし → スキップ"
-          [ -f site/index.html ] || echo '<!doctype html><meta charset="utf-8"><title>Steel Booking</title><p>OK</p>' > site/index.html
+          [ -f site/index.html ] || printf '%s' '<!doctype html><meta charset="utf-8"><title>Steel Booking</title><meta http-equiv="refresh" content="0; url=./liff/"><p>Steel Booking … <a href="./liff/">予約画面へ</a></p>' > site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
