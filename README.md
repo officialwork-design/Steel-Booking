@@ -1,88 +1,63 @@
 # Steel-Booking（スチール予約システム）
 
-LINE LIFF から予約を受け付け、Google Apps Script (GAS) を経由して
-Google スプレッドシートに保存する予約システムです。
+LINE LIFF から予約を受け付け、Google Apps Script (GAS) 経由で
+Google スプレッドシートに保存する予約システム。
 
 ```
 LINE → LIFF(予約画面) → GAS Web API → スプレッドシート
-                                          ↑ コード管理: GitHub / clasp
-公開: GitHub Pages（LIFF・管理画面）
+公開: GitHub Pages / コード管理: GitHub / GAS連携: clasp
 ```
 
-## 構成
+## 仕様
 
-| 役割 | 実体 |
-|------|------|
-| 予約画面 | `liff/index.html`（GitHub Pages で公開） |
-| 管理画面 | `admin/index.html`（予約一覧の閲覧） |
-| 予約処理 | `gas/Code.gs`（GAS Web API: `doPost`/`doGet`） |
-| 予約保存 | Google スプレッドシート |
-| 公開 | GitHub Pages（`.github/workflows/pages.yml`） |
-| GAS 連携 | clasp |
+- **予約できるのは管理者が登録した人だけ**（usersシート）。名前は管理者が設定・変更でき、その名前で表示される。
+- **予約枠は管理者が事前に用意**（slotsシート）。**1枠1人（先着）**で、埋まると他の人には表示されない。
+- **1人1件**まで。予約後は**アプリ内で枠変更・備考編集**が可能。
+- **備考**は予約するキャスト本人が記入。
+- **ルール文**（設定シート）を管理者が編集でき、予約画面に表示される。
 
-- 公開URL: https://officialwork-design.github.io/Steel-Booking/
-  - 予約画面: `/Steel-Booking/liff/`
-  - 管理画面: `/Steel-Booking/admin/`
-- LIFF URL: https://liff.line.me/2010792348-o9YZUyTV
+## URL
 
-## 予約フォームの項目
+- 予約画面（LINE内で開く）: https://liff.line.me/2010792348-o9YZUyTV
+- 管理画面: https://officialwork-design.github.io/Steel-Booking/admin/
 
-`ライン名`（必須）／`希望日`（必須）／`希望時間`（必須）／`備考`（任意）。
-氏名（表示名）と userId は LIFF プロフィールから自動取得します。
+## スプレッドシートの構成（自動作成される）
 
-## セットアップ手順
+| シート | 列 |
+|--------|----|
+| `users` | userId / 名前 / 有効 / 登録日時 |
+| `slots` | 枠ID / 日付 / 時間 / 有効 / 作成日時 |
+| `予約`  | userId / 名前 / 枠ID / 日付 / 時間 / 備考 / ステータス / 受付日時 / 更新日時 |
+| `設定`  | キー / 値（`rules` にルール文） |
 
-### 1. スプレッドシートを用意
-新規スプレッドシートを作成し、URL の `/d/` と `/edit` の間の文字列（スプレッドシートID）を控える。
-ヘッダー行は GAS 初回実行時に自動作成されます。
+各シートは初回アクセス時にヘッダー付きで自動生成される。管理画面から編集すれば
+スプレッドシートを直接触らなくても運用できる（直接編集も可）。
 
-### 2. GAS を配置（clasp）
+## スクリプトプロパティ
+
+| キー | 説明 | 必須 |
+|------|------|------|
+| `SHEET_ID` | 保存先スプレッドシートID（未設定ならコード内の既定値を使用） | 任意 |
+| `ADMIN_KEY` | **管理画面の操作パスコード**。未設定だと管理機能は使えない | ✅ |
+
+> `ADMIN_KEY` はコードに直書きすると公開リポジトリ経由で漏れるため、
+> 必ず GAS の「プロジェクトの設定 > スクリプトプロパティ」で設定すること。
+
+## 更新手順（clasp）
+
+`gas/CLASP.md` を参照。要点:
+
 ```bash
-npm install -g @google/clasp
-clasp login
 cd gas
-# 既存のGASプロジェクトに紐付ける場合:
-cp .clasp.json.example .clasp.json   # scriptId を記入
-clasp push
+clasp push -f
+clasp deploy -i <既存デプロイID>   # /exec URLを変えず新バージョンに更新
 ```
-（GUIで作る場合は Apps Script エディタに `Code.gs` を貼り付けてもOK）
 
-Apps Script の「プロジェクトの設定 > スクリプト プロパティ」に以下を登録:
+## 運用の流れ
 
-| キー | 値 | 必須 |
-|------|----|------|
-| `SHEET_ID` | 手順1のスプレッドシートID | ✅ |
-| `SHEET_NAME` | シート名（既定 `予約`） | 任意 |
-| `ADMIN_KEY` | 管理画面の閲覧パスコード | 任意 |
-
-### 3. GAS をウェブアプリとしてデプロイ
-「デプロイ > 新しいデプロイ > 種類: ウェブアプリ」
-- 実行するユーザー: **自分**
-- アクセスできるユーザー: **全員**
-
-発行される `https://script.google.com/macros/s/XXXX/exec` を控える。
-
-### 4. エンドポイントを設定
-- `liff/index.html` 冒頭の `CONFIG.GAS_ENDPOINT` に `/exec` URL を設定
-- `admin/index.html` 冒頭の `GAS_ENDPOINT` に同じ URL を設定
-- `CONFIG.LIFF_ID` は `2010792348-o9YZUyTV` 設定済み
-
-### 5. LINE Developers 側の設定
-LIFF アプリのエンドポイント URL を
-`https://officialwork-design.github.io/Steel-Booking/liff/` に設定。
-- サイズ: Full
-
-### 6. GitHub Pages を有効化
-リポジトリ Settings > Pages > Build and deployment の Source を
-**GitHub Actions** にする。`main` への push で自動デプロイされます。
-
-## 動作確認
-1. `https://liff.line.me/2010792348-o9YZUyTV` を LINE で開く
-2. ログイン後、ライン名・日時・備考を入力して予約
-3. スプレッドシートに行が追加されることを確認
-4. `/Steel-Booking/admin/` で一覧を確認
-
-## 注意
-- GAS 側で LINE の `idToken` 検証は未実装です（フォームからは送信済み）。
-  本番で厳密な本人確認が必要なら `doPost` に検証処理を追加してください。
-- 公開設定のトークン・パスコード類は Git にコミットしないでください。
+1. 管理画面でパスコード（ADMIN_KEY）を入力して「読み込み」
+2. 「ユーザー」タブでキャストの userId と名前を登録
+   - userId は、本人が予約画面を開くと画面に表示される
+3. 「予約枠」タブで日付・時間の枠を追加
+4. 「ルール」タブで注意事項を記入
+5. キャストは LINE で予約画面を開き、空き枠を選んで予約（1人1件・変更可）
