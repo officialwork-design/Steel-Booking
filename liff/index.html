@@ -203,7 +203,7 @@
 
   $("adminBtn").addEventListener("click", () => {
     const url = new URL("../admin/", window.location.href).href;
-    if (window.liff && liff.openWindow) liff.openWindow({ url: url, external: true });
+    if (window.liff && liff.openWindow) liff.openWindow({ url: url, external: false });
     else window.open(url, "_blank");
   });
 

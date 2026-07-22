@@ -11,15 +11,15 @@
 <div class="container py-4" style="max-width:1040px;">
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h1 class="h4 fw-bold mb-0">スチール予約 — 管理画面</h1>
-    <a href="https://liff.line.me/2010792348-o9YZUyTV" target="_blank" rel="noopener" class="btn btn-line btn-sm">📱 予約画面を開く</a>
+    <div class="d-flex gap-2">
+      <button id="reload" class="btn btn-outline-dark btn-sm d-none">再読み込み</button>
+      <a href="https://liff.line.me/2010792348-o9YZUyTV" target="_blank" rel="noopener" class="btn btn-line btn-sm">📱 予約画面を開く</a>
+    </div>
   </div>
 
-  <div class="row g-2 align-items-center mb-3">
-    <div class="col"><input id="key" type="password" class="form-control" placeholder="管理パスコード（ADMIN_KEY）"></div>
-    <div class="col-auto"><button id="load" class="btn btn-dark">読み込み</button></div>
-  </div>
-  <div id="msg" class="small text-muted mb-3">パスコードを入れて「読み込み」を押してください。</div>
+  <div id="msg" class="small text-muted mb-3">LINE認証中…</div>
 
+  <div id="panel" class="d-none">
   <ul class="nav nav-tabs" role="tablist">
     <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#t-resv">予約一覧</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#t-users">ユーザー</button></li>
@@ -46,7 +46,7 @@
           <div class="col-md-6"><input id="uUserId" class="form-control" placeholder="LINE userId（本人がアプリに表示されるID）"></div>
           <div class="col-md-3"><input id="uName" class="form-control" placeholder="表示名"></div>
           <div class="col-md-3 d-flex align-items-center"><div class="form-check"><input id="uAdmin" class="form-check-input" type="checkbox"><label class="form-check-label" for="uAdmin">管理者として登録</label></div></div>
-          <div class="col-md-6 col-lg-2 d-grid mt-2 mt-lg-0"><button id="uSave" class="btn btn-primary">保存</button></div>
+          <div class="col-12 col-lg-3 d-grid"><button id="uSave" class="btn btn-primary">保存</button></div>
         </div>
         <div class="form-text">userIdは、本人が予約画面を開くと「ユーザーID: …」と表示されます。それを登録してください。</div>
       </div></div>
@@ -96,39 +96,65 @@
       </div></div>
     </div>
   </div>
+  </div>
 </div>
 
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-  // ▼▼▼ 書き換えるのはここだけ ▼▼▼
-  const GAS_ENDPOINT = "https://script.google.com/macros/s/AKfycbzCZMp7K4BcvoL4Jxd1SC1aB1LXtWT2eSbONSokii6mXVLUfIAMIkWPVI4-Fb7PPsWw7A/exec";
+  // ▼▼▼ 書き換えるのはこの2つだけ ▼▼▼
+  const CONFIG = {
+    LIFF_ID: "2010792348-o9YZUyTV",
+    GAS_ENDPOINT: "https://script.google.com/macros/s/AKfycbzCZMp7K4BcvoL4Jxd1SC1aB1LXtWT2eSbONSokii6mXVLUfIAMIkWPVI4-Fb7PPsWw7A/exec"
+  };
   // ▲▲▲ ここだけ ▲▲▲
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-  const key = () => $("key").value;
+  const setMsg = (t, k) => { const m=$("msg"); m.textContent=t; m.className="small mb-3 "+(k==="ok"?"text-success":k==="err"?"text-danger":"text-muted"); };
+
+  let ID_TOKEN = null;
 
   async function post(payload) {
-    const res = await fetch(GAS_ENDPOINT, {
+    const res = await fetch(CONFIG.GAS_ENDPOINT, {
       method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
-      body: JSON.stringify(Object.assign({ key: key() }, payload))
+      body: JSON.stringify(Object.assign({ idToken: ID_TOKEN }, payload))
     });
     return res.json();
   }
 
+  async function boot() {
+    try {
+      setMsg("LINE認証中…");
+      await liff.init({ liffId: CONFIG.LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        setMsg("LINEログインへ移動します…");
+        liff.login({ redirectUri: window.location.origin + window.location.pathname });
+        return;
+      }
+      ID_TOKEN = liff.getIDToken();
+      await load();
+    } catch (e) {
+      setMsg("認証エラー: " + (e && e.message ? e.message : e), "err");
+    }
+  }
+
   async function load() {
-    const msg = $("msg");
-    msg.className = "small text-muted mb-3"; msg.textContent = "読み込み中…";
+    setMsg("読み込み中…");
     try {
       const data = await post({ action: "admin_list" });
-      if (!data.ok) { msg.className="small text-danger mb-3"; msg.textContent = "❌ " + (data.error||"取得失敗"); return; }
+      if (!data.ok) {
+        $("panel").classList.add("d-none");
+        setMsg("❌ " + (data.error || "取得失敗") + "（管理者に登録されているアカウントでLINEから開いてください）", "err");
+        return;
+      }
+      $("panel").classList.remove("d-none");
+      $("reload").classList.remove("d-none");
       renderResv(data.reservations); renderUsers(data.users); renderSlots(data.slots);
       $("rules").value = data.rules || "";
-      try { localStorage.setItem("sb_admin_key", key()); } catch(e){}
-      msg.className="small text-success mb-3";
-      msg.textContent = `読み込み完了（予約 ${data.reservations.length} / ユーザー ${data.users.length} / 枠 ${data.slots.length}）`;
+      setMsg(`読み込み完了（予約 ${data.reservations.length} / ユーザー ${data.users.length} / 枠 ${data.slots.length}）`, "ok");
     } catch (e) {
-      msg.className="small text-danger mb-3"; msg.textContent = "❌ 通信エラー: " + (e.message||e);
+      setMsg("❌ 通信エラー: " + (e.message||e), "err");
     }
   }
 
@@ -169,7 +195,7 @@
     </tr>`).join("") : '<tr><td colspan="5" class="text-center text-muted py-4">枠なし</td></tr>';
   }
 
-  // イベント委任
+  // ボタン系（クリック委任）
   document.addEventListener("click", async (e) => {
     const t = e.target;
     if (t.dataset.delResv && confirm("この予約を削除しますか？")) { await post({action:"admin_deleteReservation", userId:t.dataset.delResv}); load(); }
@@ -180,9 +206,16 @@
     else if (t.dataset.toggleSlot) { await post({action:"admin_saveSlot", slotId:t.dataset.toggleSlot, date:t.dataset.date, time:t.dataset.time, active:(t.dataset.active!=="true")}); load(); }
   });
 
-  try { const k = localStorage.getItem("sb_admin_key"); if (k) $("key").value = k; } catch(e){}
-  $("load").addEventListener("click", load);
-  $("key").addEventListener("keydown", e => { if (e.key==="Enter") load(); });
+  // ステータス変更（change委任）
+  document.addEventListener("change", async (e) => {
+    const t = e.target;
+    if (t.dataset.statusUser) {
+      const r = await post({ action:"admin_setStatus", userId:t.dataset.statusUser, status:t.value });
+      if (!r.ok) alert("❌ " + (r.error||"失敗"));
+    }
+  });
+
+  $("reload").addEventListener("click", load);
 
   $("uSave").addEventListener("click", async () => {
     if (!$("uUserId").value.trim()) { alert("userId を入力してください"); return; }
@@ -196,6 +229,13 @@
     if (r.ok) { $("sTime").value=""; load(); } else alert("❌ " + (r.error||"失敗"));
   });
 
+  $("bSave").addEventListener("click", async () => {
+    const times = $("bTimes").value.split(",").map(x=>x.trim()).filter(Boolean);
+    if (!$("bStart").value || !$("bEnd").value || !times.length) { alert("開始日・終了日・時間を入力してください"); return; }
+    const r = await post({ action:"admin_addSlots", startDate:$("bStart").value, endDate:$("bEnd").value, times });
+    if (r.ok) { alert(`${r.added}件の枠を追加しました`); $("bTimes").value=""; load(); } else alert("❌ " + (r.error||"失敗"));
+  });
+
   $("rSave").addEventListener("click", async () => {
     const rm = $("rMsg"); rm.textContent = "保存中…"; rm.className="small ms-2 text-muted";
     const r = await post({ action:"admin_saveRules", text:$("rules").value });
@@ -203,23 +243,7 @@
     else { rm.textContent = "❌ " + (r.error||"失敗"); rm.className="small ms-2 text-danger"; }
   });
 
-  // 予約ステータス変更
-  document.addEventListener("change", async (e) => {
-    const t = e.target;
-    if (t.dataset.statusUser) {
-      const r = await post({ action:"admin_setStatus", userId:t.dataset.statusUser, status:t.value });
-      if (!r.ok) alert("❌ " + (r.error||"失敗"));
-    }
-  });
-
-  // 枠の一括追加
-  $("bSave").addEventListener("click", async () => {
-    const times = $("bTimes").value.split(",").map(x=>x.trim()).filter(Boolean);
-    if (!$("bStart").value || !$("bEnd").value || !times.length) { alert("開始日・終了日・時間を入力してください"); return; }
-    const r = await post({ action:"admin_addSlots", startDate:$("bStart").value, endDate:$("bEnd").value, times });
-    if (r.ok) { alert(`${r.added}件の枠を追加しました`); $("bTimes").value=""; load(); }
-    else alert("❌ " + (r.error||"失敗"));
-  });
+  boot();
 </script>
 </body>
 </html>

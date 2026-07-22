@@ -15,6 +15,9 @@
 // SHEET_ID はスクリプトプロパティが優先。未設定ならこの既定値を使う。
 var DEFAULT_SHEET_ID = '1neHxod-oOulSHjkbd41hoZ9emkkJPtHvvaQgO6wNvoE';
 
+// LINEログインチャネルID（LIFF ID の先頭部分）。idToken検証に使用。
+var CHANNEL_ID = '2010792348';
+
 var SH = {
   users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者'] },
   slots: { name: 'slots', headers: ['枠ID', '日付', '時間', '有効', '作成日時'] },
@@ -216,11 +219,30 @@ function actionBook_(body) {
 
 /* ---------- 管理向け（要 ADMIN_KEY） ---------- */
 
-function adminAuth_(key) {
-  var k = prop_('ADMIN_KEY', '');
-  if (!k) return { ok: false, error: '管理機能が未設定です（ADMIN_KEY を設定してください）。' };
-  if (String(key) !== k) return { ok: false, error: 'パスコードが違います。' };
-  return { ok: true };
+// LINEのidTokenを検証して userId(sub) を返す。不正なら null。
+function verifyLineUser_(idToken) {
+  if (!idToken) return null;
+  try {
+    var res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
+      method: 'post',
+      payload: { id_token: idToken, client_id: CHANNEL_ID },
+      muteHttpExceptions: true
+    });
+    var data = JSON.parse(res.getContentText());
+    if (data && data.sub && String(data.aud) === CHANNEL_ID) return String(data.sub);
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// 管理者本人であることを検証（idToken → 管理者フラグ）
+function requireAdmin_(idToken) {
+  var uid = verifyLineUser_(idToken);
+  if (!uid) return { ok: false, error: 'LINE認証に失敗しました。LINE内で開き直してください。' };
+  var u = findUser_(uid);
+  if (!u || !truthy_(u['管理者'])) return { ok: false, error: '管理者権限がありません。' };
+  return { ok: true, userId: uid };
 }
 
 function adminList_() {
@@ -374,7 +396,7 @@ function route_(action, body) {
   if (action === 'book') return actionBook_(body);
   if (action === 'cancel') return actionCancel_(body);
   if (ADMIN_ACTIONS[action]) {
-    var auth = adminAuth_(body.key);
+    var auth = requireAdmin_(body.idToken);
     if (!auth.ok) return auth;
     return ADMIN_ACTIONS[action](body);
   }
