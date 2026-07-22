@@ -67,6 +67,22 @@ function nowStr_() {
   return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
 }
 
+function fmtDateCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd');
+  return String(v == null ? '' : v);
+}
+function fmtTimeCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, 'Asia/Tokyo', 'HH:mm');
+  var s = String(v == null ? '' : v);
+  var m = /^(\d{1,2}):(\d{2})/.exec(s);
+  return m ? (('0'+m[1]).slice(-2) + ':' + m[2]) : s;
+}
+function nextSlotId_() {
+  var max = 0;
+  rows_(SH.slots).forEach(function (s) { var n = parseInt(s['枠ID'], 10); if (!isNaN(n) && n > max) max = n; });
+  return max + 1;
+}
+
 function truthy_(v) {
   if (v === true) return true;
   var s = String(v).trim().toLowerCase();
@@ -104,7 +120,7 @@ function availableSlots_(userId) {
   return rows_(SH.slots)
     .filter(function (s) { return truthy_(s['有効']) && !taken[String(s['枠ID'])]; })
     .map(function (s) {
-      return { slotId: String(s['枠ID']), date: String(s['日付']), time: String(s['時間']) };
+      return { slotId: String(s['枠ID']), date: fmtDateCell_(s['日付']), time: fmtTimeCell_(s['時間']) };
     })
     .sort(function (a, b) {
       return (a.date + a.time < b.date + b.time) ? -1 : 1;
@@ -120,7 +136,7 @@ function getRules_() {
 function reservationOut_(r) {
   if (!r) return null;
   return {
-    slotId: String(r['枠ID']), date: String(r['日付']), time: String(r['時間']),
+    slotId: String(r['枠ID']), date: fmtDateCell_(r['日付']), time: fmtTimeCell_(r['時間']),
     remarks: String(r['備考'] || ''), status: String(r['ステータス'] || '')
   };
 }
@@ -166,7 +182,7 @@ function actionBook_(body) {
   if (taken[slotId]) return { ok: false, error: 'その枠はすでに埋まりました。別の枠を選んでください。' };
 
   var name = String(u['名前'] || '');
-  var date = String(slot['日付']); var time = String(slot['時間']);
+  var date = fmtDateCell_(slot['日付']); var time = fmtTimeCell_(slot['時間']);
   var remarks = String(body.remarks || '');
   var sh = sheet_(SH.resv);
   var existing = findResv_(userId);
@@ -199,12 +215,12 @@ function adminList_() {
     }),
     slots: rows_(SH.slots).map(function (s) {
       var taken = takenSlotIds_(null);
-      return { slotId: String(s['枠ID']), date: String(s['日付']), time: String(s['時間']), active: truthy_(s['有効']), taken: !!taken[String(s['枠ID'])] };
+      return { slotId: String(s['枠ID']), date: fmtDateCell_(s['日付']), time: fmtTimeCell_(s['時間']), active: truthy_(s['有効']), taken: !!taken[String(s['枠ID'])] };
     }),
     reservations: rows_(SH.resv).map(function (r) {
       return {
         userId: String(r.userId), name: String(r['名前'] || ''), slotId: String(r['枠ID']),
-        date: String(r['日付']), time: String(r['時間']), remarks: String(r['備考'] || ''),
+        date: fmtDateCell_(r['日付']), time: fmtTimeCell_(r['時間']), remarks: String(r['備考'] || ''),
         status: String(r['ステータス'] || ''), receivedAt: String(r['受付日時'] || ''), updatedAt: String(r['更新日時'] || '')
       };
     }),
@@ -241,7 +257,7 @@ function adminSaveSlot_(b) {
   if (target) {
     sh.getRange(target._row, 1, 1, 5).setValues([[target['枠ID'], b.date, b.time, active, target['作成日時'] || nowStr_()]]);
   } else {
-    var id = 'S' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyyMMddHHmmss') + Math.floor(Math.random() * 100);
+    var id = nextSlotId_();
     sh.appendRow([id, b.date, b.time, active, nowStr_()]);
   }
   return { ok: true };
