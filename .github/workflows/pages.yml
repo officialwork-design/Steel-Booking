@@ -1,52 +1,31 @@
-name: Deploy GitHub Pages
-
+name: Deploy Pages
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "liff/**"
-      - "admin/**"
-      - ".github/workflows/pages.yml"
-
+    branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
   pages: write
   id-token: write
-
 concurrency:
-  group: github-pages
+  group: pages
   cancel-in-progress: true
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Prepare public files
+      - uses: actions/checkout@v4
+      - name: Assemble site (liff + admin only)
         run: |
           mkdir -p site
-          cp -r liff site/liff
-          cp -r admin site/admin
-          touch site/.nojekyll
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+          [ -d liff ]  && cp -r liff  site/liff  || echo "liff/ なし → スキップ"
+          [ -d admin ] && cp -r admin site/admin || echo "admin/ なし → スキップ"
+          [ -f site/index.html ] || echo '<!doctype html><meta charset="utf-8"><title>Steel Booking</title><p>OK</p>' > site/index.html
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: site
-
-      - name: Deploy GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
