@@ -16,7 +16,7 @@
 var DEFAULT_SHEET_ID = '1neHxod-oOulSHjkbd41hoZ9emkkJPtHvvaQgO6wNvoE';
 
 var SH = {
-  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時'] },
+  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者'] },
   slots: { name: 'slots', headers: ['枠ID', '日付', '時間', '有効', '作成日時'] },
   resv:  { name: '予約',  headers: ['userId', '名前', '枠ID', '日付', '時間', '備考', 'ステータス', '受付日時', '更新日時'] },
   conf:  { name: '設定',  headers: ['キー', '値'] }
@@ -37,7 +37,7 @@ function sheet_(def) {
   var ss = ss_();
   var sh = ss.getSheetByName(def.name);
   if (!sh) sh = ss.insertSheet(def.name);
-  if (sh.getLastRow() === 0) {
+  if (sh.getLastRow() === 0 || sh.getLastColumn() < def.headers.length) {
     sh.getRange(1, 1, 1, def.headers.length).setValues([def.headers]);
     sh.setFrozenRows(1);
   }
@@ -154,6 +154,7 @@ function actionInit_(body) {
     registered: registered,
     name: u ? String(u['名前'] || '') : '',
     userId: String(userId),
+    isAdmin: !!(u && truthy_(u['管理者'])),
     rules: getRules_()
   };
   if (registered) {
@@ -211,7 +212,7 @@ function adminList_() {
   return {
     ok: true,
     users: rows_(SH.users).map(function (u) {
-      return { userId: String(u.userId), name: String(u['名前'] || ''), active: truthy_(u['有効']) };
+      return { userId: String(u.userId), name: String(u['名前'] || ''), active: truthy_(u['有効']), admin: truthy_(u['管理者']) };
     }),
     slots: rows_(SH.slots).map(function (s) {
       var taken = takenSlotIds_(null);
@@ -228,15 +229,21 @@ function adminList_() {
   };
 }
 
+function optBool_(v, dflt) {
+  if (v === undefined || v === null) return dflt;
+  return !(v === false || v === 'false');
+}
 function adminSaveUser_(b) {
   var sh = sheet_(SH.users);
   var u = findUser_(b.userId);
-  var active = (b.active === false || b.active === 'false') ? false : true;
+  var active = optBool_(b.active, u ? truthy_(u['有効']) : true);
+  var admin = optBool_(b.admin, u ? truthy_(u['管理者']) : false);
+  var name = (b.name === undefined || b.name === null || b.name === '') ? (u ? String(u['名前'] || '') : '') : b.name;
   if (u) {
-    sh.getRange(u._row, 1, 1, 4).setValues([[b.userId, b.name || u['名前'] || '', active, u['登録日時'] || nowStr_()]]);
+    sh.getRange(u._row, 1, 1, 5).setValues([[b.userId, name, active, u['登録日時'] || nowStr_(), admin]]);
   } else {
     if (!b.userId) return { ok: false, error: 'userId が必要です。' };
-    sh.appendRow([b.userId, b.name || '', active, nowStr_()]);
+    sh.appendRow([b.userId, name, active, nowStr_(), admin]);
   }
   return { ok: true };
 }

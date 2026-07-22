@@ -30,6 +30,11 @@
     </div>
   </div>
 
+  <!-- 管理者用 -->
+  <div id="adminBar" class="d-none mb-3">
+    <button id="adminBtn" class="btn btn-dark btn-sm w-100">🔧 管理画面を開く</button>
+  </div>
+
   <!-- ルール -->
   <div id="rulesCard" class="card border-0 shadow-sm mb-3 d-none">
     <div class="card-body">
@@ -136,8 +141,9 @@
 
     // 登録済み
     $("dispName").textContent = data.name || PROFILE.displayName || "";
-    $("dispSub").textContent = "登録済み";
+    $("dispSub").textContent = data.isAdmin ? "登録済み（管理者）" : "登録済み";
     $("profile").classList.remove("d-none"); $("profile").classList.add("d-flex");
+    if (data.isAdmin) $("adminBar").classList.remove("d-none");
 
     if (data.myReservation) {
       showCurrent(data.myReservation);
@@ -193,6 +199,12 @@
   function escapeHtml(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
   $("editBtn").addEventListener("click", () => showForm(true, STATE.myReservation));
+
+  $("adminBtn").addEventListener("click", () => {
+    const url = new URL("../admin/", window.location.href).href;
+    if (window.liff && liff.openWindow) liff.openWindow({ url: url, external: true });
+    else window.open(url, "_blank");
+  });
 
   $("bookingForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
