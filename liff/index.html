@@ -4,71 +4,63 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>スチール予約</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
-  :root { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; --line:#06c755; }
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 20px; line-height: 1.7; color: #1a1a1a; background:#fafafa; }
-  .card { max-width: 480px; margin: 0 auto; }
-  h1 { font-size: 1.25rem; margin: 0 0 14px; }
-  .status { padding: 11px 14px; border-radius: 10px; background: #f4f4f5; font-size: .92rem; white-space: pre-wrap; word-break: break-word; }
-  .status.ok { background: #e7f6ec; }
-  .status.err { background: #fdeaea; }
-  .profile { display: none; align-items: center; gap: 12px; margin: 16px 0; }
-  .profile img { width: 48px; height: 48px; border-radius: 50%; }
-  .profile .name { font-weight: 600; }
-  form { display:none; margin-top: 18px; }
-  label { display:block; font-weight:600; font-size:.9rem; margin: 14px 0 6px; }
-  .req { color:#e02929; font-weight:400; font-size:.8rem; }
-  input, select, textarea { width:100%; padding:12px; font-size:1rem; border:1px solid #d4d4d8; border-radius:10px; background:#fff; }
-  textarea { min-height: 84px; resize: vertical; }
-  button { width: 100%; padding: 14px; font-size: 1rem; border: 0; border-radius: 10px; background: var(--line); color: #fff; font-weight: 600; margin-top: 20px; cursor:pointer; }
-  button:disabled { opacity: .5; }
-  .sub { font-size: .78rem; color: #888; margin-top: 6px; word-break: break-all; }
-  .result { margin-top:14px; font-size:.9rem; }
-  details { margin-top: 22px; font-size: .82rem; color: #666; }
-  pre { background: #f4f4f5; padding: 10px; border-radius: 8px; overflow-x: auto; }
+  body { background:#f5f6f8; }
+  .wrap { max-width: 480px; }
+  .btn-line { background:#06c755; border-color:#06c755; color:#fff; }
+  .btn-line:hover { background:#05b34c; border-color:#05b34c; color:#fff; }
+  .avatar { width:48px; height:48px; object-fit:cover; }
+  .req { color:#dc3545; font-size:.8rem; font-weight:400; }
 </style>
 </head>
 <body>
-<div class="card">
-  <h1>スチール予約</h1>
+<div class="wrap container py-4">
+  <h1 class="h4 fw-bold mb-3">スチール予約</h1>
 
-  <div id="status" class="status">読み込み中…</div>
+  <div id="status" class="alert alert-secondary py-2 px-3 mb-3" style="white-space:pre-wrap;">読み込み中…</div>
 
-  <div id="profile" class="profile">
-    <img id="avatar" alt="">
+  <div id="profile" class="d-none align-items-center gap-2 mb-3">
+    <img id="avatar" class="avatar rounded-circle" alt="">
     <div>
-      <div class="name" id="displayName"></div>
-      <div class="sub" id="userId"></div>
+      <div class="fw-semibold" id="displayName"></div>
+      <div class="text-muted small text-break" id="userId"></div>
     </div>
   </div>
 
-  <form id="bookingForm" autocomplete="off">
-    <label for="lineName">ライン名 <span class="req">*必須</span></label>
-    <select id="lineName" required>
-      <option value="">選択してください</option>
-      <option>ラインA</option>
-      <option>ラインB</option>
-      <option>ラインC</option>
-    </select>
-
-    <label for="date">希望日 <span class="req">*必須</span></label>
-    <input type="date" id="date" required>
-
-    <label for="time">希望時間 <span class="req">*必須</span></label>
-    <input type="time" id="time" required>
-
-    <label for="remarks">備考</label>
-    <textarea id="remarks" placeholder="ご要望など（任意）"></textarea>
-
-    <button id="submitBtn" type="submit">この内容で予約する</button>
-    <div id="result" class="result"></div>
+  <form id="bookingForm" class="d-none card shadow-sm border-0">
+    <div class="card-body">
+      <div class="mb-3">
+        <label for="lineName" class="form-label fw-semibold">ライン名 <span class="req">*必須</span></label>
+        <select id="lineName" class="form-select" required>
+          <option value="">選択してください</option>
+          <option>ラインA</option>
+          <option>ラインB</option>
+          <option>ラインC</option>
+        </select>
+      </div>
+      <div class="row g-2">
+        <div class="col-7 mb-3">
+          <label for="date" class="form-label fw-semibold">希望日 <span class="req">*必須</span></label>
+          <input type="date" id="date" class="form-control" required>
+        </div>
+        <div class="col-5 mb-3">
+          <label for="time" class="form-label fw-semibold">希望時間 <span class="req">*必須</span></label>
+          <input type="time" id="time" class="form-control" required>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="remarks" class="form-label fw-semibold">備考</label>
+        <textarea id="remarks" class="form-control" rows="3" placeholder="ご要望など（任意）"></textarea>
+      </div>
+      <button id="submitBtn" type="submit" class="btn btn-line w-100 py-2 fw-semibold">この内容で予約する</button>
+      <div id="result" class="mt-3 small"></div>
+    </div>
   </form>
 
-  <details>
+  <details class="mt-4 text-muted small">
     <summary>設定値（書き換えるのはこの2箇所）</summary>
-    <pre id="configView"></pre>
-    <p>LIFF_ID と GAS_ENDPOINT を、このファイル冒頭の CONFIG で設定してください。</p>
+    <pre id="configView" class="bg-white border rounded p-2 mt-2"></pre>
   </details>
 </div>
 
@@ -77,7 +69,7 @@
   // ▼▼▼ 書き換えるのはこの2つだけ ▼▼▼
   const CONFIG = {
     LIFF_ID: "2010792348-o9YZUyTV",
-    GAS_ENDPOINT: "https://script.google.com/macros/s/AKfycbzCZMp7K4BcvoL4Jxd1SC1aB1LXtWT2eSbONSokii6mXVLUfIAMIkWPVI4-Fb7PPsWw7A/exec" // 例: https://script.google.com/macros/s/XXXX/exec
+    GAS_ENDPOINT: "https://script.google.com/macros/s/AKfycbzCZMp7K4BcvoL4Jxd1SC1aB1LXtWT2eSbONSokii6mXVLUfIAMIkWPVI4-Fb7PPsWw7A/exec"
   };
   // ▲▲▲ ここだけ ▲▲▲
 
@@ -85,7 +77,9 @@
   const setStatus = (msg, kind) => {
     const el = $("status");
     el.textContent = msg;
-    el.className = "status" + (kind ? " " + kind : "");
+    el.className = "alert py-2 px-3 mb-3 " +
+      (kind === "ok" ? "alert-success" : kind === "err" ? "alert-danger" : "alert-secondary");
+    el.style.whiteSpace = "pre-wrap";
   };
   $("configView").textContent = JSON.stringify(CONFIG, null, 2);
 
@@ -93,25 +87,29 @@
 
   async function main() {
     if (!CONFIG.LIFF_ID || CONFIG.LIFF_ID.startsWith("PUT_")) {
-      setStatus("LIFF_ID が未設定です。\nCONFIG.LIFF_ID を設定してください。", "err");
-      return;
+      setStatus("LIFF_ID が未設定です。", "err"); return;
     }
     try {
       setStatus("LIFF 初期化中…");
-      await liff.init({ liffId: CONFIG.LIFF_ID });
+      // 外部ブラウザでも自動でログインを処理させ、無限ループを防ぐ
+      await liff.init({ liffId: CONFIG.LIFF_ID, withLoginOnExternalBrowser: true });
+
       if (!liff.isLoggedIn()) {
+        // redirectUri を現在URLに固定してループを防止（liff.state の欠落対策）
         setStatus("LINEログインへ移動します…");
-        liff.login();
+        liff.login({ redirectUri: window.location.href });
         return;
       }
+
       PROFILE = await liff.getProfile();
       $("avatar").src = PROFILE.pictureUrl || "";
       $("displayName").textContent = PROFILE.displayName || "(名前なし)";
       $("userId").textContent = PROFILE.userId;
-      $("profile").style.display = "flex";
+      $("profile").classList.remove("d-none");
+      $("profile").classList.add("d-flex");
+
       setStatus("ログインできました。下のフォームから予約してください。", "ok");
-      $("bookingForm").style.display = "block";
-      // 今日以降のみ選択可
+      $("bookingForm").classList.remove("d-none");
       $("date").min = new Date().toISOString().slice(0, 10);
     } catch (e) {
       setStatus("LIFF初期化エラー:\n" + (e && e.message ? e.message : e), "err");
@@ -120,15 +118,11 @@
 
   $("bookingForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    const out = $("result");
-    const btn = $("submitBtn");
-
+    const out = $("result"), btn = $("submitBtn");
     if (CONFIG.GAS_ENDPOINT.startsWith("PUT_")) {
-      out.textContent = "⚠ GAS_ENDPOINT が未設定です。CONFIG.GAS_ENDPOINT を設定してください。";
-      out.style.color = "#e02929";
-      return;
+      out.className = "mt-3 small text-danger";
+      out.textContent = "⚠ GAS_ENDPOINT が未設定です。"; return;
     }
-
     const payload = {
       action: "create",
       idToken: liff.getIDToken(),
@@ -139,12 +133,10 @@
       time: $("time").value,
       remarks: $("remarks").value
     };
-
     btn.disabled = true;
-    out.style.color = "#555";
+    out.className = "mt-3 small text-muted";
     out.textContent = "送信中…";
     try {
-      // CORSプリフライト回避のため text/plain で送信（bodyはJSON文字列）
       const res = await fetch(CONFIG.GAS_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
@@ -152,16 +144,16 @@
       });
       const data = await res.json();
       if (data.ok) {
-        out.style.color = "#0a7d33";
+        out.className = "mt-3 small text-success fw-semibold";
         out.textContent = "✅ 予約を受け付けました（受付番号: " + data.id + "）";
         $("bookingForm").reset();
         $("date").min = new Date().toISOString().slice(0, 10);
       } else {
-        out.style.color = "#e02929";
+        out.className = "mt-3 small text-danger";
         out.textContent = "❌ 予約に失敗しました: " + (data.error || "不明なエラー");
       }
     } catch (e) {
-      out.style.color = "#e02929";
+      out.className = "mt-3 small text-danger";
       out.textContent = "❌ 通信エラー: " + (e && e.message ? e.message : e);
     } finally {
       btn.disabled = false;
