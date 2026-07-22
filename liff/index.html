@@ -51,7 +51,7 @@
 <script>
   // ▼▼▼ あとで書き換えるのはこの2つだけ ▼▼▼
   const CONFIG = {
-    LIFF_ID: "PUT_YOUR_LIFF_ID_HERE",        // 例: "1234567890-abcXYZ"
+    LIFF_ID: "2010472508-fnVzhZDp",        // 例: "1234567890-abcXYZ"
     GAS_ENDPOINT: "PUT_YOUR_GAS_EXEC_URL_HERE" // 例: "https://script.google.com/macros/s/XXXX/exec"
   };
   // ▲▲▲ ここだけ ▲▲▲
@@ -66,7 +66,7 @@
   $("configView").textContent = JSON.stringify(CONFIG, null, 2);
 
   async function main() {
-    if (CONFIG.LIFF_ID === "PUT_YOUR_LIFF_ID_HERE") {
+    if (CONFIG.LIFF_ID === "2010472508-fnVzhZDp") {
       setStatus("LIFF_ID が未設定です。\nファイル冒頭の CONFIG.LIFF_ID を設定してください。", "err");
       return;
     }
