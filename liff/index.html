@@ -5,20 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>スチール予約</title>
 <style>
-  :root { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; }
-  body { margin: 0; padding: 24px; line-height: 1.7; color: #1a1a1a; }
+  :root { font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", sans-serif; --line:#06c755; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; line-height: 1.7; color: #1a1a1a; background:#fafafa; }
   .card { max-width: 480px; margin: 0 auto; }
-  h1 { font-size: 1.25rem; margin: 0 0 16px; }
-  .status { padding: 12px 14px; border-radius: 10px; background: #f4f4f5; font-size: .95rem; white-space: pre-wrap; word-break: break-word; }
+  h1 { font-size: 1.25rem; margin: 0 0 14px; }
+  .status { padding: 11px 14px; border-radius: 10px; background: #f4f4f5; font-size: .92rem; white-space: pre-wrap; word-break: break-word; }
   .status.ok { background: #e7f6ec; }
   .status.err { background: #fdeaea; }
-  .profile { display: none; align-items: center; gap: 12px; margin: 20px 0; }
-  .profile img { width: 56px; height: 56px; border-radius: 50%; }
+  .profile { display: none; align-items: center; gap: 12px; margin: 16px 0; }
+  .profile img { width: 48px; height: 48px; border-radius: 50%; }
   .profile .name { font-weight: 600; }
-  button { width: 100%; padding: 14px; font-size: 1rem; border: 0; border-radius: 10px; background: #06c755; color: #fff; font-weight: 600; margin-top: 12px; }
+  form { display:none; margin-top: 18px; }
+  label { display:block; font-weight:600; font-size:.9rem; margin: 14px 0 6px; }
+  .req { color:#e02929; font-weight:400; font-size:.8rem; }
+  input, select, textarea { width:100%; padding:12px; font-size:1rem; border:1px solid #d4d4d8; border-radius:10px; background:#fff; }
+  textarea { min-height: 84px; resize: vertical; }
+  button { width: 100%; padding: 14px; font-size: 1rem; border: 0; border-radius: 10px; background: var(--line); color: #fff; font-weight: 600; margin-top: 20px; cursor:pointer; }
   button:disabled { opacity: .5; }
-  .sub { font-size: .8rem; color: #888; margin-top: 8px; word-break: break-all; }
-  details { margin-top: 20px; font-size: .85rem; color: #555; }
+  .sub { font-size: .78rem; color: #888; margin-top: 6px; word-break: break-all; }
+  .result { margin-top:14px; font-size:.9rem; }
+  details { margin-top: 22px; font-size: .82rem; color: #666; }
   pre { background: #f4f4f5; padding: 10px; border-radius: 8px; overflow-x: auto; }
 </style>
 </head>
@@ -36,23 +43,41 @@
     </div>
   </div>
 
-  <button id="pingBtn" disabled>GASに疎通テスト(ダミー)</button>
-  <div id="pingResult" class="sub"></div>
+  <form id="bookingForm" autocomplete="off">
+    <label for="lineName">ライン名 <span class="req">*必須</span></label>
+    <select id="lineName" required>
+      <option value="">選択してください</option>
+      <option>ラインA</option>
+      <option>ラインB</option>
+      <option>ラインC</option>
+    </select>
+
+    <label for="date">希望日 <span class="req">*必須</span></label>
+    <input type="date" id="date" required>
+
+    <label for="time">希望時間 <span class="req">*必須</span></label>
+    <input type="time" id="time" required>
+
+    <label for="remarks">備考</label>
+    <textarea id="remarks" placeholder="ご要望など（任意）"></textarea>
+
+    <button id="submitBtn" type="submit">この内容で予約する</button>
+    <div id="result" class="result"></div>
+  </form>
 
   <details>
-    <summary>設定値(あとで書き換える2箇所)</summary>
+    <summary>設定値（書き換えるのはこの2箇所）</summary>
     <pre id="configView"></pre>
-    <p>LIFF ID と GAS_ENDPOINT を、このファイル冒頭の CONFIG で設定してください。</p>
+    <p>LIFF_ID と GAS_ENDPOINT を、このファイル冒頭の CONFIG で設定してください。</p>
   </details>
 </div>
 
-<!-- LIFF SDK -->
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script>
-  // ▼▼▼ あとで書き換えるのはこの2つだけ ▼▼▼
+  // ▼▼▼ 書き換えるのはこの2つだけ ▼▼▼
   const CONFIG = {
-    LIFF_ID: "2010472508-fnVzhZDp",        // 例: "1234567890-abcXYZ"
-    GAS_ENDPOINT: "PUT_YOUR_GAS_EXEC_URL_HERE" // 例: "https://script.google.com/macros/s/XXXX/exec"
+    LIFF_ID: "2010792348-o9YZUyTV",
+    GAS_ENDPOINT: "PUT_YOUR_GAS_EXEC_URL_HERE" // 例: https://script.google.com/macros/s/XXXX/exec
   };
   // ▲▲▲ ここだけ ▲▲▲
 
@@ -62,64 +87,84 @@
     el.textContent = msg;
     el.className = "status" + (kind ? " " + kind : "");
   };
-
   $("configView").textContent = JSON.stringify(CONFIG, null, 2);
 
+  let PROFILE = null;
+
   async function main() {
-    if (CONFIG.LIFF_ID === "2010472508-fnVzhZDp") {
-      setStatus("LIFF_ID が未設定です。\nファイル冒頭の CONFIG.LIFF_ID を設定してください。", "err");
+    if (!CONFIG.LIFF_ID || CONFIG.LIFF_ID.startsWith("PUT_")) {
+      setStatus("LIFF_ID が未設定です。\nCONFIG.LIFF_ID を設定してください。", "err");
       return;
     }
     try {
       setStatus("LIFF 初期化中…");
       await liff.init({ liffId: CONFIG.LIFF_ID });
-
       if (!liff.isLoggedIn()) {
         setStatus("LINEログインへ移動します…");
         liff.login();
         return;
       }
-
-      const profile = await liff.getProfile();
-      $("avatar").src = profile.pictureUrl || "";
-      $("displayName").textContent = profile.displayName || "(名前なし)";
-      $("userId").textContent = profile.userId;
+      PROFILE = await liff.getProfile();
+      $("avatar").src = PROFILE.pictureUrl || "";
+      $("displayName").textContent = PROFILE.displayName || "(名前なし)";
+      $("userId").textContent = PROFILE.userId;
       $("profile").style.display = "flex";
-
-      const inClient = liff.isInClient();
-      setStatus(
-        "ログインできました。\n" +
-        "実行環境: " + (inClient ? "LINEアプリ内" : "外部ブラウザ"),
-        "ok"
-      );
-
-      $("pingBtn").disabled = false;
+      setStatus("ログインできました。下のフォームから予約してください。", "ok");
+      $("bookingForm").style.display = "block";
+      // 今日以降のみ選択可
+      $("date").min = new Date().toISOString().slice(0, 10);
     } catch (e) {
       setStatus("LIFF初期化エラー:\n" + (e && e.message ? e.message : e), "err");
     }
   }
 
-  // GASへの疎通テスト(ダミー)。
-  // 本番のアクション名・パラメータは後でGAS側に合わせて書き換える。
-  // CORS回避のため Content-Type は text/plain、JSONは文字列で body に載せる。
-  $("pingBtn").addEventListener("click", async () => {
-    const out = $("pingResult");
-    if (CONFIG.GAS_ENDPOINT === "PUT_YOUR_GAS_EXEC_URL_HERE") {
-      out.textContent = "GAS_ENDPOINT が未設定です。今はダミー段階なのでこのままでOK。";
+  $("bookingForm").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const out = $("result");
+    const btn = $("submitBtn");
+
+    if (CONFIG.GAS_ENDPOINT.startsWith("PUT_")) {
+      out.textContent = "⚠ GAS_ENDPOINT が未設定です。CONFIG.GAS_ENDPOINT を設定してください。";
+      out.style.color = "#e02929";
       return;
     }
+
+    const payload = {
+      action: "create",
+      idToken: liff.getIDToken(),
+      userId: PROFILE ? PROFILE.userId : "",
+      displayName: PROFILE ? PROFILE.displayName : "",
+      lineName: $("lineName").value,
+      date: $("date").value,
+      time: $("time").value,
+      remarks: $("remarks").value
+    };
+
+    btn.disabled = true;
+    out.style.color = "#555";
     out.textContent = "送信中…";
     try {
-      const idToken = liff.getIDToken(); // GAS側でLINEトークン検証する想定
+      // CORSプリフライト回避のため text/plain で送信（bodyはJSON文字列）
       const res = await fetch(CONFIG.GAS_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action: "ping", idToken })
+        body: JSON.stringify(payload)
       });
-      const text = await res.text();
-      out.textContent = "応答: " + text;
+      const data = await res.json();
+      if (data.ok) {
+        out.style.color = "#0a7d33";
+        out.textContent = "✅ 予約を受け付けました（受付番号: " + data.id + "）";
+        $("bookingForm").reset();
+        $("date").min = new Date().toISOString().slice(0, 10);
+      } else {
+        out.style.color = "#e02929";
+        out.textContent = "❌ 予約に失敗しました: " + (data.error || "不明なエラー");
+      }
     } catch (e) {
-      out.textContent = "疎通エラー: " + (e && e.message ? e.message : e);
+      out.style.color = "#e02929";
+      out.textContent = "❌ 通信エラー: " + (e && e.message ? e.message : e);
+    } finally {
+      btn.disabled = false;
     }
   });
 
