@@ -23,7 +23,7 @@ jobs:
           mkdir -p site
           [ -d liff ]  && cp -r liff  site/liff  || echo "liff/ なし → スキップ"
           [ -d admin ] && cp -r admin site/admin || echo "admin/ なし → スキップ"
-          [ -f site/index.html ] || printf '%s' '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Steel Booking</title><body style="font-family:system-ui;max-width:420px;margin:40px auto;padding:0 16px"><h1 style="font-size:1.3rem">Steel Booking</h1><p><a href="./liff/">予約画面(LIFF)</a></p><p><a href="./admin/">管理画面</a></p>' > site/index.html
+          [ -f site/index.html ] || printf '%s' '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Steel Booking</title><body style="font-family:system-ui;max-width:440px;margin:40px auto;padding:0 16px;line-height:1.7"><h1 style="font-size:1.3rem">Steel Booking</h1><p><a href="https://liff.line.me/2010792348-o9YZUyTV" style="display:inline-block;background:#06c755;color:#fff;padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600">LINEで予約画面を開く</a></p><p style="color:#888;font-size:.85rem">※このボタンはLINEアプリ内で開いてください（ブラウザ直開きはログインが必要です）</p><hr><p><a href="./admin/">管理画面（スタッフ用）</a></p>' > site/index.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
