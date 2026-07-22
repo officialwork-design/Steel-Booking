@@ -113,12 +113,11 @@
   const esc = (s) => String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const setMsg = (t, k) => { const m=$("msg"); m.textContent=t; m.className="small mb-3 "+(k==="ok"?"text-success":k==="err"?"text-danger":"text-muted"); };
 
-  let ID_TOKEN = null;
-
   async function post(payload) {
+    const token = (window.liff && liff.getAccessToken) ? liff.getAccessToken() : null;
     const res = await fetch(CONFIG.GAS_ENDPOINT, {
       method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
-      body: JSON.stringify(Object.assign({ idToken: ID_TOKEN }, payload))
+      body: JSON.stringify(Object.assign({ accessToken: token }, payload))
     });
     return res.json();
   }
@@ -132,7 +131,6 @@
         liff.login({ redirectUri: window.location.origin + window.location.pathname });
         return;
       }
-      ID_TOKEN = liff.getIDToken();
       await load();
     } catch (e) {
       setMsg("認証エラー: " + (e && e.message ? e.message : e), "err");

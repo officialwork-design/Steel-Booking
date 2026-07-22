@@ -219,30 +219,34 @@ function actionBook_(body) {
 
 /* ---------- 管理向け（要 ADMIN_KEY） ---------- */
 
-// LINEのidTokenを検証して {ok, userId} または {ok:false, error} を返す。
-function verifyLineUser_(idToken) {
-  if (!idToken) return { ok: false, error: 'idTokenがありません' };
-  var res;
+// LINEのアクセストークンを検証して {ok, userId} または {ok:false, error} を返す。
+// idTokenは短命ですぐ失効するため、SDKが自動更新するアクセストークンを使う。
+function verifyLineUser_(accessToken) {
+  if (!accessToken) return { ok: false, error: 'accessTokenがありません' };
+  // 1) トークンが有効かつ自チャネル発行のものか確認
+  var vRes;
   try {
-    res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
-      method: 'post',
-      payload: { id_token: idToken, client_id: CHANNEL_ID },
-      muteHttpExceptions: true
-    });
+    vRes = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify?access_token=' + encodeURIComponent(accessToken),
+      { muteHttpExceptions: true });
   } catch (e) {
     return { ok: false, error: '外部通信の権限が未承認の可能性: ' + e };
   }
-  var data;
-  try { data = JSON.parse(res.getContentText()); } catch (e) { return { ok: false, error: '応答解析失敗' }; }
-  if (data.error) return { ok: false, error: 'LINE: ' + data.error + ' ' + (data.error_description || '') };
-  if (!data.sub) return { ok: false, error: 'subが取得できません' };
-  if (String(data.aud) !== String(CHANNEL_ID)) return { ok: false, error: 'aud不一致(aud=' + data.aud + ')' };
-  return { ok: true, userId: String(data.sub) };
+  var vd;
+  try { vd = JSON.parse(vRes.getContentText()); } catch (e) { return { ok: false, error: '検証応答の解析失敗' }; }
+  if (vd.error) return { ok: false, error: 'LINE: ' + vd.error + ' ' + (vd.error_description || '') };
+  if (String(vd.client_id) !== String(CHANNEL_ID)) return { ok: false, error: 'client_id不一致(' + vd.client_id + ')' };
+  // 2) userId を取得
+  var pRes = UrlFetchApp.fetch('https://api.line.me/v2/profile',
+    { headers: { Authorization: 'Bearer ' + accessToken }, muteHttpExceptions: true });
+  var pd;
+  try { pd = JSON.parse(pRes.getContentText()); } catch (e) { return { ok: false, error: 'プロフィール応答の解析失敗' }; }
+  if (!pd.userId) return { ok: false, error: 'userIdが取得できません' };
+  return { ok: true, userId: String(pd.userId) };
 }
 
-// 管理者本人であることを検証（idToken → 管理者フラグ）
-function requireAdmin_(idToken) {
-  var v = verifyLineUser_(idToken);
+// 管理者本人であることを検証（accessToken → 管理者フラグ）
+function requireAdmin_(accessToken) {
+  var v = verifyLineUser_(accessToken);
   if (!v.ok) return { ok: false, error: '認証NG: ' + v.error };
   var u = findUser_(v.userId);
   if (!u || !truthy_(u['管理者'])) return { ok: false, error: '管理者権限がありません（あなたのuserId: ' + v.userId + '）' };
@@ -251,8 +255,7 @@ function requireAdmin_(idToken) {
 
 // ▼ 初回だけエディタから手動実行して権限を承認するための関数
 function 権限承認用() {
-  UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify',
-    { method: 'post', payload: { id_token: 'dummy', client_id: CHANNEL_ID }, muteHttpExceptions: true });
+  UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify?access_token=dummy', { muteHttpExceptions: true });
   var n = SpreadsheetApp.openById(prop_('SHEET_ID', DEFAULT_SHEET_ID)).getName();
   Logger.log('OK: ' + n);
 }
@@ -408,7 +411,7 @@ function route_(action, body) {
   if (action === 'book') return actionBook_(body);
   if (action === 'cancel') return actionCancel_(body);
   if (ADMIN_ACTIONS[action]) {
-    var auth = requireAdmin_(body.idToken);
+    var auth = requireAdmin_(body.accessToken);
     if (!auth.ok) return auth;
     return ADMIN_ACTIONS[action](body);
   }
