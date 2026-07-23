@@ -385,8 +385,14 @@ function adminDeleteSlot_(b) {
 
 function adminDeleteReservation_(b) {
   var sh = sheet_(SH.resv);
-  var r = findResv_(b.userId);
-  if (r) sh.deleteRow(r._row);
+  var slotId = String(b.slotId || '');
+  var rs = rows_(SH.resv);
+  for (var i = 0; i < rs.length; i++) {
+    if (String(rs[i].userId) === String(b.userId) && (!slotId || String(rs[i]['枠ID']) === slotId)) {
+      sh.deleteRow(rs[i]._row);
+      return { ok: true };
+    }
+  }
   return { ok: true };
 }
 
