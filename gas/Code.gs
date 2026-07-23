@@ -249,6 +249,7 @@ function actionBook_(body) {
 
   var name = String(u['名前'] || '');
   var remarks = String(body.remarks || '');
+  if (!remarks.trim()) return { ok: false, error: '備考欄に、使用する衣装を記入してください。' };
   var sh = sheet_(SH.resv);
 
   if (editSlotId) {
@@ -412,6 +413,7 @@ function actionBookMulti_(body) {
   if (!userId) return { ok: false, error: 'userId がありません。' };
   var u = findUser_(userId);
   if (!u || !truthy_(u['有効'])) return { ok: false, error: '現在ご利用いただけません。' };
+  if (!String(body.remarks || '').trim()) return { ok: false, error: '備考欄に、使用する衣装を記入してください。' };
 
   // 選択枠（重複除去）
   var ids = [].concat(body.slotIds || []).map(function (x) { return String(x); }).filter(Boolean);
