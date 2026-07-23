@@ -266,7 +266,7 @@ function actionBook_(body) {
     var target = null;
     for (var m = 0; m < myResvs.length; m++) { if (String(myResvs[m]['枠ID']) === editSlotId) { target = myResvs[m]; break; } }
     if (!target) return { ok: false, error: '変更対象の予約が見つかりません。' };
-    if (isLockedDate_(target['日付'])) return { ok: false, error: '当日以降の予約は変更できません。変更が必要な場合はLINEの個人グループにご連絡ください。' };
+    if (isLockedDate_(target['日付'])) return { ok: false, error: '当日以降は変更・取消できません。LINE個人グループにご連絡ください。' };
     var vals = [userId, name, newSlotId, date, time, remarks, target['ステータス'] || '受付', target['受付日時'] || nowStr_(), nowStr_()];
     sh.getRange(target._row, 1, 1, SH.resv.headers.length).setValues([vals]);
     return { ok: true, updated: true };
@@ -468,7 +468,7 @@ function actionCancel_(body) {
   var rs = rows_(SH.resv);
   for (var i = 0; i < rs.length; i++) {
     if (String(rs[i].userId) === String(userId) && (!slotId || String(rs[i]['枠ID']) === slotId)) {
-      if (isLockedDate_(rs[i]['日付'])) return { ok: false, error: '当日以降の予約は取り消せません。変更が必要な場合はLINEの個人グループにご連絡ください。' };
+      if (isLockedDate_(rs[i]['日付'])) return { ok: false, error: '当日以降は変更・取消できません。LINE個人グループにご連絡ください。' };
       sh.deleteRow(rs[i]._row);
       return { ok: true };
     }

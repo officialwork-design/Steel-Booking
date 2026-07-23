@@ -170,7 +170,7 @@
         </div>
         <div class="mt-2">
           ${r.locked
-            ? `<div class="alert alert-warning py-2 px-3 mb-0 small">当日以降は変更・取消できません。<br>変更が必要な場合はLINEの個人グループにご連絡ください。</div>`
+            ? `<div class="alert alert-warning py-2 px-3 mb-0 small">当日以降は変更・取消できません。LINE個人グループにご連絡ください。</div>`
             : `<button class="btn btn-outline-secondary btn-sm" data-edit="${esc(r.slotId)}">変更</button>
                <button class="btn btn-outline-danger btn-sm ms-1" data-cancel="${esc(r.slotId)}">取り消す</button>`}
         </div>
