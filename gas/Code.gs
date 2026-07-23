@@ -118,6 +118,10 @@ function findResv_(userId) {
   return null;
 }
 
+function findResvsByUser_(userId) {
+  return rows_(SH.resv).filter(function (r) { return String(r.userId) === String(userId); });
+}
+
 // 他人に予約されている枠IDの集合
 function takenSlotIds_(exceptUserId) {
   var rs = rows_(SH.resv);
@@ -165,26 +169,50 @@ function reservationOut_(r) {
 function actionInit_(body) {
   var userId = body.userId;
   if (!userId) return { ok: false, error: 'userId がありません。' };
-  var u = findUser_(userId);
+
+  // users を1回読み。無ければLINE名で自動登録。
+  var usersRows = rows_(SH.users);
+  var u = null;
+  for (var i = 0; i < usersRows.length; i++) { if (String(usersRows[i].userId) === String(userId)) { u = usersRows[i]; break; } }
   if (!u) {
-    // 初回アクセス時は LINE名で自動登録（管理者が後で名前を変更できる）
     var nm = String(body.displayName || '');
     sheet_(SH.users).appendRow([userId, nm, true, nowStr_(), false]);
-    u = findUser_(userId);
+    u = { userId: userId, '名前': nm, '有効': true, '管理者': false };
   }
   var active = truthy_(u['有効']);
   var res = {
     ok: true,
-    registered: active,               // 有効なら予約可
-    blocked: !active,                 // 無効化された人は予約不可
+    registered: active,
+    blocked: !active,
     name: String(u['名前'] || body.displayName || ''),
     userId: String(userId),
     isAdmin: !!truthy_(u['管理者']),
-    rules: getRules_()
+    rules: '',
+    maxReservations: 2
   };
+
+  // rules（設定を1回読み）
+  var confRows = rows_(SH.conf);
+  for (var c = 0; c < confRows.length; c++) { if (String(confRows[c]['キー']) === 'rules') { res.rules = String(confRows[c]['値'] || ''); break; } }
+
   if (active) {
-    res.myReservation = reservationOut_(findResv_(userId));
-    res.slots = availableSlots_(userId);
+    // 予約を1回読み → 自分の予約 と 全体の埋まり枠 を同時に作る
+    var resvRows = rows_(SH.resv);
+    var mine = [], takenAll = {};
+    for (var r = 0; r < resvRows.length; r++) {
+      var rr = resvRows[r];
+      if (rr['枠ID']) takenAll[String(rr['枠ID'])] = true;
+      if (String(rr.userId) === String(userId)) mine.push(rr);
+    }
+    res.myReservations = mine.map(reservationOut_);
+    // 空き枠（slotsを1回読み）: 有効・未来・誰にも取られていない
+    res.slots = rows_(SH.slots).filter(function (sl) {
+      if (!truthy_(sl['有効'])) return false;
+      if (takenAll[String(sl['枠ID'])]) return false;
+      return !isPast_(fmtDateCell_(sl['日付']), fmtTimeCell_(sl['時間']));
+    }).map(function (sl) {
+      return { slotId: String(sl['枠ID']), date: fmtDateCell_(sl['日付']), time: fmtTimeCell_(sl['時間']) };
+    }).sort(function (a, b) { return (a.date + a.time < b.date + b.time) ? -1 : 1; });
   }
   return res;
 }
@@ -194,33 +222,48 @@ function actionBook_(body) {
   var userId = body.userId;
   if (!userId) return { ok: false, error: 'userId がありません。' };
   var u = findUser_(userId);
-  if (!u || !truthy_(u['有効'])) return { ok: false, error: '未登録です。管理者に登録を依頼してください。' };
-  var slotId = String(body.slotId || '');
-  if (!slotId) return { ok: false, error: '予約枠を選択してください。' };
+  if (!u || !truthy_(u['有効'])) return { ok: false, error: '現在ご利用いただけません。' };
 
-  // 枠の存在・有効チェック
+  var newSlotId = String(body.slotId || '');
+  if (!newSlotId) return { ok: false, error: '予約枠を選択してください。' };
+  var editSlotId = body.editSlotId ? String(body.editSlotId) : '';
+
+  // 枠の存在・有効・未来チェック
   var slot = null;
-  rows_(SH.slots).forEach(function (s) { if (String(s['枠ID']) === slotId) slot = s; });
+  rows_(SH.slots).forEach(function (s2) { if (String(s2['枠ID']) === newSlotId) slot = s2; });
   if (!slot || !truthy_(slot['有効'])) return { ok: false, error: 'その枠は選択できません。' };
+  var date = fmtDateCell_(slot['日付']), time = fmtTimeCell_(slot['時間']);
+  if (isPast_(date, time)) return { ok: false, error: 'その枠は受付を終了しました。' };
 
   // 他人に取られていないか
-  var taken = takenSlotIds_(userId);
-  if (taken[slotId]) return { ok: false, error: 'その枠はすでに埋まりました。別の枠を選んでください。' };
+  var takenOthers = takenSlotIds_(userId);
+  if (takenOthers[newSlotId]) return { ok: false, error: 'その枠はすでに埋まりました。別の枠を選んでください。' };
+
+  var myResvs = findResvsByUser_(userId);
+  // 自分が(編集対象以外で)同じ枠を既に持っていないか
+  for (var k = 0; k < myResvs.length; k++) {
+    if (String(myResvs[k]['枠ID']) === newSlotId && String(myResvs[k]['枠ID']) !== editSlotId) {
+      return { ok: false, error: 'その枠はすでにあなたが予約済みです。' };
+    }
+  }
 
   var name = String(u['名前'] || '');
-  var date = fmtDateCell_(slot['日付']); var time = fmtTimeCell_(slot['時間']);
   var remarks = String(body.remarks || '');
   var sh = sheet_(SH.resv);
-  var existing = findResv_(userId);
 
-  if (existing) {
-    // 更新（受付日時は保持、更新日時のみ更新）
-    var vals = [userId, name, slotId, date, time, remarks, existing['ステータス'] || '受付', existing['受付日時'] || nowStr_(), nowStr_()];
-    sh.getRange(existing._row, 1, 1, SH.resv.headers.length).setValues([vals]);
-    return { ok: true, updated: true, reservation: reservationOut_({ '枠ID': slotId, '日付': date, '時間': time, '備考': remarks, 'ステータス': existing['ステータス'] || '受付' }) };
+  if (editSlotId) {
+    // 既存予約(editSlotId)を新しい枠/備考に更新
+    var target = null;
+    for (var m = 0; m < myResvs.length; m++) { if (String(myResvs[m]['枠ID']) === editSlotId) { target = myResvs[m]; break; } }
+    if (!target) return { ok: false, error: '変更対象の予約が見つかりません。' };
+    var vals = [userId, name, newSlotId, date, time, remarks, target['ステータス'] || '受付', target['受付日時'] || nowStr_(), nowStr_()];
+    sh.getRange(target._row, 1, 1, SH.resv.headers.length).setValues([vals]);
+    return { ok: true, updated: true };
   } else {
-    sh.appendRow([userId, name, slotId, date, time, remarks, '受付', nowStr_(), nowStr_()]);
-    return { ok: true, created: true, reservation: reservationOut_({ '枠ID': slotId, '日付': date, '時間': time, '備考': remarks, 'ステータス': '受付' }) };
+    // 新規（1人2枠まで）
+    if (myResvs.length >= 2) return { ok: false, error: '予約は1人2枠までです。既存の予約を変更またはキャンセルしてください。' };
+    sh.appendRow([userId, name, newSlotId, date, time, remarks, '受付', nowStr_(), nowStr_()]);
+    return { ok: true, created: true };
   }
 }
 
@@ -360,9 +403,15 @@ function adminSaveRules_(b) {
 function actionCancel_(body) {
   var userId = body.userId;
   if (!userId) return { ok: false, error: 'userId がありません。' };
+  var slotId = String(body.slotId || '');
   var sh = sheet_(SH.resv);
-  var r = findResv_(userId);
-  if (r) sh.deleteRow(r._row);
+  var rs = rows_(SH.resv);
+  for (var i = 0; i < rs.length; i++) {
+    if (String(rs[i].userId) === String(userId) && (!slotId || String(rs[i]['枠ID']) === slotId)) {
+      sh.deleteRow(rs[i]._row);
+      return { ok: true };
+    }
+  }
   return { ok: true };
 }
 

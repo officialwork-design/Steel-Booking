@@ -30,12 +30,10 @@
     </div>
   </div>
 
-  <!-- 管理者用 -->
   <div id="adminBar" class="d-none mb-3">
     <button id="adminBtn" class="btn btn-dark btn-sm w-100">🔧 管理画面を開く</button>
   </div>
 
-  <!-- ルール -->
   <div id="rulesCard" class="card border-0 shadow-sm mb-3 d-none">
     <div class="card-body">
       <div class="fw-semibold mb-2">📋 ルール・注意事項</div>
@@ -43,17 +41,13 @@
     </div>
   </div>
 
-  <!-- 現在の予約 -->
-  <div id="currentCard" class="card border-0 shadow-sm mb-3 d-none">
-    <div class="card-body">
-      <div class="fw-semibold mb-2">✅ あなたの予約</div>
-      <div id="currentInfo" class="mb-2"></div>
-      <button id="editBtn" class="btn btn-outline-secondary btn-sm">予約を変更する</button>
-      <button id="cancelBtn" class="btn btn-outline-danger btn-sm ms-1">取り消す</button>
-    </div>
-  </div>
+  <!-- 予約一覧（0〜2件） -->
+  <div id="resvList" class="mb-2"></div>
 
-  <!-- 予約フォーム -->
+  <!-- 新規予約ボタン -->
+  <button id="addBtn" class="btn btn-line w-100 py-2 fw-semibold mb-3 d-none">＋ 新しく予約する</button>
+
+  <!-- 予約フォーム（新規/変更共用） -->
   <form id="bookingForm" class="d-none card border-0 shadow-sm">
     <div class="card-body">
       <div id="formTitle" class="fw-semibold mb-2">予約枠を選択</div>
@@ -64,7 +58,10 @@
       <label for="remarks" class="form-label fw-semibold">備考</label>
       <textarea id="remarks" class="form-control mb-3" rows="3" placeholder="ご要望・連絡事項など"></textarea>
 
-      <button id="submitBtn" type="submit" class="btn btn-line w-100 py-2 fw-semibold" disabled>この内容で予約する</button>
+      <div class="d-flex gap-2">
+        <button id="submitBtn" type="submit" class="btn btn-line flex-grow-1 py-2 fw-semibold" disabled>予約する</button>
+        <button id="cancelFormBtn" type="button" class="btn btn-outline-secondary">やめる</button>
+      </div>
       <div id="result" class="mt-3 small"></div>
     </div>
   </form>
@@ -94,8 +91,9 @@
     const dt = new Date(+m[1], +m[2]-1, +m[3]);
     return `${+m[2]}/${+m[3]}(${wdays[dt.getDay()]})`;
   };
+  const esc = (s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-  let PROFILE = null, STATE = null, selectedSlot = null;
+  let PROFILE = null, STATE = null, selectedSlot = null, editingSlotId = null;
 
   async function api(payload) {
     const res = await fetch(CONFIG.GAS_ENDPOINT, {
@@ -129,11 +127,9 @@
     if (!data.ok) { setStatus("エラー: " + (data.error || "不明"), "err"); return; }
     STATE = data;
 
-    // ルール表示
     if (data.rules) { $("rules").textContent = data.rules; $("rulesCard").classList.remove("d-none"); }
 
     if (!data.registered) {
-      // 有効フラグが外された（管理者が利用停止した）場合のみここに来る
       $("dispName").textContent = data.name || PROFILE.displayName || "";
       $("dispSub").textContent = "利用停止中";
       $("profile").classList.remove("d-none"); $("profile").classList.add("d-flex");
@@ -141,44 +137,71 @@
       return;
     }
 
-    // 登録済み
     $("dispName").textContent = data.name || PROFILE.displayName || "";
     $("dispSub").textContent = data.isAdmin ? "登録済み（管理者）" : "登録済み";
     $("profile").classList.remove("d-none"); $("profile").classList.add("d-flex");
     if (data.isAdmin) $("adminBar").classList.remove("d-none");
 
-    if (data.myReservation) {
-      showCurrent(data.myReservation);
-      setStatus("予約済みです。内容は下のとおりです。", "ok");
-    } else {
-      setStatus("下の枠から選んで予約してください。", "ok");
-      showForm(false, null);
+    // フォームは閉じた状態に
+    hideForm();
+    renderReservations();
+
+    const count = (STATE.myReservations || []).length;
+    const max = STATE.maxReservations || 2;
+    if (count === 0) setStatus("下の「新しく予約する」から予約してください。", "ok");
+    else if (count < max) setStatus(`予約は${count}件です（あと${max - count}件まで追加できます）。`, "ok");
+    else setStatus(`予約は${count}件です（上限）。変更・取消はこちらから。`, "ok");
+  }
+
+  function renderReservations() {
+    const list = $("resvList");
+    const resvs = STATE.myReservations || [];
+    list.innerHTML = resvs.map((r, i) => `
+      <div class="card border-0 shadow-sm mb-2"><div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start">
+          <div>
+            <div class="fs-5 fw-bold">${fmtDate(r.date)} ${esc(r.time)}</div>
+            ${r.remarks ? `<div class="text-muted small mt-1">備考: ${esc(r.remarks)}</div>` : ""}
+            <div class="mt-1"><span class="badge text-bg-success">${esc(r.status||"受付")}</span></div>
+          </div>
+        </div>
+        <div class="mt-2">
+          <button class="btn btn-outline-secondary btn-sm" data-edit="${esc(r.slotId)}">変更</button>
+          <button class="btn btn-outline-danger btn-sm ms-1" data-cancel="${esc(r.slotId)}">取り消す</button>
+        </div>
+      </div></div>`).join("");
+
+    const count = resvs.length, max = STATE.maxReservations || 2;
+    $("addBtn").classList.toggle("d-none", !(count < max));
+  }
+
+  function showForm(editReservation) {
+    editingSlotId = editReservation ? editReservation.slotId : null;
+    $("formTitle").textContent = editReservation ? "予約を変更" : "新しく予約";
+    $("submitBtn").textContent = editReservation ? "この内容に変更する" : "この内容で予約する";
+    $("remarks").value = editReservation ? editReservation.remarks : "";
+    selectedSlot = editReservation ? editReservation.slotId : null;
+
+    // 選べる枠 = 空き枠 ＋（編集中ならその予約枠を先頭に）
+    let slots = (STATE.slots || []).slice();
+    if (editReservation && !slots.some(s => s.slotId === editReservation.slotId)) {
+      slots.unshift({ slotId: editReservation.slotId, date: editReservation.date, time: editReservation.time });
     }
-  }
+    renderSlots(slots, selectedSlot);
 
-  function showCurrent(r) {
-    $("currentInfo").innerHTML =
-      `<div class="fs-5 fw-bold">${fmtDate(r.date)} ${r.time}</div>` +
-      (r.remarks ? `<div class="text-muted small mt-1">備考: ${escapeHtml(r.remarks)}</div>` : "") +
-      `<div class="mt-1"><span class="badge text-bg-success">${escapeHtml(r.status||"受付")}</span></div>`;
-    $("currentCard").classList.remove("d-none");
-    $("bookingForm").classList.add("d-none");
-  }
-
-  function showForm(isEdit, current) {
-    $("formTitle").textContent = isEdit ? "予約を変更" : "予約枠を選択";
-    $("submitBtn").textContent = isEdit ? "この内容に変更する" : "この内容で予約する";
-    selectedSlot = current ? current.slotId : null;
-    $("remarks").value = current ? current.remarks : "";
-    renderSlots(current ? current.slotId : null);
     $("bookingForm").classList.remove("d-none");
-    $("currentCard").classList.add("d-none");
+    $("addBtn").classList.add("d-none");
     updateSubmit();
+    $("result").textContent = "";
   }
 
-  function renderSlots(preselect) {
+  function hideForm() {
+    $("bookingForm").classList.add("d-none");
+    editingSlotId = null; selectedSlot = null;
+  }
+
+  function renderSlots(slots, preselect) {
     const box = $("slots"); box.innerHTML = "";
-    const slots = (STATE.slots || []);
     if (!slots.length) { $("noSlots").classList.remove("d-none"); return; }
     $("noSlots").classList.add("d-none");
     slots.forEach(s => {
@@ -198,24 +221,26 @@
 
   function updateSubmit() { $("submitBtn").disabled = !selectedSlot; }
 
-  function escapeHtml(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+  // 予約一覧のボタン（委任）
+  $("resvList").addEventListener("click", async (e) => {
+    const t = e.target;
+    if (t.dataset.edit) {
+      const r = (STATE.myReservations||[]).find(x => x.slotId === t.dataset.edit);
+      if (r) showForm(r);
+    } else if (t.dataset.cancel) {
+      if (!confirm("この予約を取り消しますか？")) return;
+      const d = await api({ action: "cancel", userId: PROFILE.userId, slotId: t.dataset.cancel, idToken: liff.getIDToken() });
+      if (d.ok) { await refresh(); } else alert("❌ " + (d.error || "取消に失敗しました"));
+    }
+  });
 
-  $("editBtn").addEventListener("click", () => showForm(true, STATE.myReservation));
+  $("addBtn").addEventListener("click", () => showForm(null));
+  $("cancelFormBtn").addEventListener("click", () => { hideForm(); renderReservations(); });
 
   $("adminBtn").addEventListener("click", () => {
-    // 同じLIFF配下の管理画面をLIFFとして開く（サブパス指定で認証される）
     const url = "https://liff.line.me/" + CONFIG.LIFF_ID + "/admin/";
     if (window.liff && liff.openWindow) liff.openWindow({ url: url, external: false });
     else window.open(url, "_blank");
-  });
-
-  $("cancelBtn").addEventListener("click", async () => {
-    if (!confirm("予約を取り消しますか？この操作は元に戻せません。")) return;
-    try {
-      const d = await api({ action: "cancel", userId: PROFILE.userId, idToken: liff.getIDToken() });
-      if (d.ok) { setStatus("予約を取り消しました。もう一度予約できます。", "ok"); await refresh(); }
-      else alert("❌ " + (d.error || "取消に失敗しました"));
-    } catch (e) { alert("❌ 通信エラー: " + (e && e.message ? e.message : e)); }
   });
 
   $("bookingForm").addEventListener("submit", async (ev) => {
@@ -224,10 +249,12 @@
     if (!selectedSlot) { out.className="mt-3 small text-danger"; out.textContent="枠を選択してください。"; return; }
     btn.disabled = true; out.className = "mt-3 small text-muted"; out.textContent = "送信中…";
     try {
-      const data = await api({
+      const payload = {
         action: "book", userId: PROFILE.userId, idToken: liff.getIDToken(),
         slotId: selectedSlot, remarks: $("remarks").value
-      });
+      };
+      if (editingSlotId) payload.editSlotId = editingSlotId;
+      const data = await api(payload);
       if (data.ok) {
         out.className = "mt-3 small text-success fw-semibold";
         out.textContent = data.updated ? "✅ 予約を変更しました。" : "✅ 予約を受け付けました。";
@@ -235,7 +262,7 @@
       } else {
         out.className = "mt-3 small text-danger";
         out.textContent = "❌ " + (data.error || "予約に失敗しました");
-        if (/埋まりました|選択できません/.test(data.error||"")) await refresh();
+        if (/埋まりました|選択できません|終了しました/.test(data.error||"")) await refresh();
       }
     } catch (e) {
       out.className = "mt-3 small text-danger";
