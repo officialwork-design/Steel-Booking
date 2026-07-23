@@ -19,7 +19,7 @@ var DEFAULT_SHEET_ID = '1neHxod-oOulSHjkbd41hoZ9emkkJPtHvvaQgO6wNvoE';
 var CHANNEL_ID = '2010792348';
 
 var SH = {
-  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者'] },
+  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者', 'LINE名'] },
   slots: { name: 'slots', headers: ['枠ID', '日付', '時間', '有効', '作成日時'] },
   resv:  { name: '予約',  headers: ['userId', '名前', '枠ID', '日付', '時間', '備考', 'ステータス', '受付日時', '更新日時'] },
   conf:  { name: '設定',  headers: ['キー', '値'] }
@@ -106,7 +106,7 @@ function fmtDateTimeCell_(v) {
 function ensureSetupOnce_() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty('setup_v3')) return;
+    if (props.getProperty('setup_v4')) return;
     // 旧仕様のヘッダーが残っている場合に、正しい並びへ上書き
     fixHeaders_(SH.users);
     fixHeaders_(SH.slots);
@@ -117,7 +117,7 @@ function ensureSetupOnce_() {
     formatCol_(SH.resv, 8);   // 受付日時
     formatCol_(SH.resv, 9);   // 更新日時
     formatCol_(SH.slots, 5);  // 作成日時
-    props.setProperty('setup_v3', '1');
+    props.setProperty('setup_v4', '1');
   } catch (e) {}
 }
 function fixHeaders_(def) {
@@ -246,8 +246,8 @@ function actionInit_(body) {
   for (var i = 0; i < usersRows.length; i++) { if (String(usersRows[i].userId) === String(userId)) { u = usersRows[i]; break; } }
   if (!u) {
     var nm = String(body.displayName || '');
-    sheet_(SH.users).appendRow([userId, nm, true, nowStr_(), false]);
-    u = { userId: userId, '名前': nm, '有効': true, '管理者': false };
+    sheet_(SH.users).appendRow([userId, nm, true, nowStr_(), false, nm]);
+    u = { userId: userId, '名前': nm, '有効': true, '管理者': false, 'LINE名': nm };
   }
   var active = truthy_(u['有効']);
   var res = {
@@ -386,7 +386,7 @@ function adminList_() {
   return {
     ok: true,
     users: rows_(SH.users).map(function (u) {
-      return { userId: String(u.userId), name: String(u['名前'] || ''), active: truthy_(u['有効']), admin: truthy_(u['管理者']) };
+      return { userId: String(u.userId), name: String(u['名前'] || ''), lineName: String(u['LINE名'] || ''), active: truthy_(u['有効']), admin: truthy_(u['管理者']) };
     }),
     slots: rows_(SH.slots).map(function (s) {
       var taken = takenSlotIds_(null);
@@ -396,8 +396,9 @@ function adminList_() {
     reservations: rows_(SH.resv).map(function (r) {
       var ru = findUser_(r.userId);
       var rname = ru ? String(ru['名前'] || '') : String(r['名前'] || '');
+      var rline = ru ? String(ru['LINE名'] || '') : '';
       return {
-        userId: String(r.userId), name: rname, slotId: String(r['枠ID']),
+        userId: String(r.userId), name: rname, lineName: rline, slotId: String(r['枠ID']),
         date: fmtDateCell_(r['日付']), time: fmtTimeCell_(r['時間']), remarks: String(r['備考'] || ''),
         status: String(r['ステータス'] || ''), receivedAt: fmtDateTimeCell_(r['受付日時']), updatedAt: fmtDateTimeCell_(r['更新日時'])
       };
@@ -427,11 +428,12 @@ function adminSaveUser_(b) {
   var active = optBool_(b.active, u ? truthy_(u['有効']) : true);
   var admin = optBool_(b.admin, u ? truthy_(u['管理者']) : false);
   var name = (b.name === undefined || b.name === null || b.name === '') ? (u ? String(u['名前'] || '') : '') : b.name;
+  var lineName = u ? String(u['LINE名'] || '') : '';
   if (u) {
-    sh.getRange(u._row, 1, 1, 5).setValues([[b.userId, name, active, u['登録日時'] || nowStr_(), admin]]);
+    sh.getRange(u._row, 1, 1, 6).setValues([[b.userId, name, active, u['登録日時'] || nowStr_(), admin, lineName]]);
   } else {
     if (!b.userId) return { ok: false, error: 'userId が必要です。' };
-    sh.appendRow([b.userId, name, active, nowStr_(), admin]);
+    sh.appendRow([b.userId, name, active, nowStr_(), admin, lineName]);
   }
   syncNameToReservations_(b.userId, name);
   return { ok: true };
