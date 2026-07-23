@@ -14,9 +14,19 @@
   .slot-btn { text-align:left; }
   .slot-btn.active { background:#06c755; border-color:#06c755; color:#fff; }
   .rules { white-space:pre-wrap; font-size:.9rem; }
+  .popup-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:1050; padding:24px; }
+  .popup-box{ background:#fff; border-radius:14px; padding:22px 20px; max-width:360px; width:100%; box-shadow:0 12px 34px rgba(0,0,0,.25); text-align:center; }
+  .popup-box .msg{ white-space:pre-wrap; font-size:.98rem; margin-bottom:16px; }
 </style>
 </head>
 <body>
+<div id="popup" class="popup-overlay d-none">
+  <div class="popup-box">
+    <div id="popupMsg" class="msg"></div>
+    <button id="popupOk" class="btn btn-line w-100 py-2 fw-semibold">OK</button>
+  </div>
+</div>
+
 <div class="wrap container py-4">
   <h1 class="h4 fw-bold mb-3">スチール予約</h1>
 
@@ -78,6 +88,7 @@
   // ▲▲▲ ここだけ ▲▲▲
 
   const $ = (id) => document.getElementById(id);
+  const showPopup = (msg) => { $("popupMsg").textContent = msg; $("popup").classList.remove("d-none"); };
   const setStatus = (msg, kind) => {
     const el = $("status");
     el.textContent = msg;
@@ -260,7 +271,7 @@
     } else if (t.dataset.cancel) {
       if (!confirm("この予約を取り消しますか？")) return;
       const d = await api({ action: "cancel", userId: PROFILE.userId, slotId: t.dataset.cancel, idToken: liff.getIDToken() });
-      if (d.ok) { await refresh(); } else alert("❌ " + (d.error || "取消に失敗しました"));
+      if (d.ok) { await refresh(); } else showPopup((d.error || "取消に失敗しました"));
     }
   });
 
@@ -276,8 +287,8 @@
   $("bookingForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const out = $("result"), btn = $("submitBtn");
-    if (selected.size < 1) { out.className="mt-3 small text-danger"; out.textContent="枠を選択してください。"; return; }
-    if (!$("remarks").value.trim()) { out.className="mt-3 small text-danger"; out.textContent="備考欄に、使用する衣装を記入してください。"; return; }
+    if (selected.size < 1) { showPopup("日時を選択してください。"); return; }
+    if (!$("remarks").value.trim()) { showPopup("備考欄に、使用する衣装を記入してください。"); return; }
     btn.disabled = true; out.className = "mt-3 small text-muted"; out.textContent = "送信中…";
     try {
       let payload;
@@ -294,15 +305,17 @@
         out.textContent = data.updated ? "✅ 予約を変更しました。" : "✅ 予約を受け付けました。";
         await refresh();
       } else {
-        out.className = "mt-3 small text-danger";
-        out.textContent = "❌ " + (data.error || "予約に失敗しました");
+        out.textContent = "";
+        showPopup((data.error || "予約に失敗しました"));
         if (/埋まりました|選択できません|終了しました/.test(data.error||"")) await refresh();
       }
     } catch (e) {
-      out.className = "mt-3 small text-danger";
-      out.textContent = "❌ 通信エラー: " + (e && e.message ? e.message : e);
+      out.textContent = "";
+      showPopup("通信エラーが発生しました。電波の良い場所で、もう一度お試しください。");
     } finally { btn.disabled = false; }
   });
+
+  $("popupOk").addEventListener("click", () => $("popup").classList.add("d-none"));
 
   main();
 </script>
