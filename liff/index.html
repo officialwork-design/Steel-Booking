@@ -93,7 +93,9 @@
   };
   const esc = (s)=>String(s==null?"":s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-  let PROFILE = null, STATE = null, selectedSlot = null, editingSlotId = null;
+  let PROFILE = null, STATE = null, editingSlotId = null;
+  let selected = new Set();   // 選択中の枠ID（新規は複数、変更は1つ）
+  let maxSelectable = 1;      // 今選べる上限
 
   async function api(payload) {
     const res = await fetch(CONFIG.GAS_ENDPOINT, {
@@ -177,17 +179,31 @@
 
   function showForm(editReservation) {
     editingSlotId = editReservation ? editReservation.slotId : null;
-    $("formTitle").textContent = editReservation ? "予約を変更" : "新しく予約";
-    $("submitBtn").textContent = editReservation ? "この内容に変更する" : "この内容で予約する";
-    $("remarks").value = editReservation ? editReservation.remarks : "";
-    selectedSlot = editReservation ? editReservation.slotId : null;
+    selected = new Set();
+    const count = (STATE.myReservations || []).length;
+    const max = STATE.maxReservations || 2;
 
-    // 選べる枠 = 空き枠 ＋（編集中ならその予約枠を先頭に）
+    if (editReservation) {
+      maxSelectable = 1; // 変更は1枠だけ選び直す
+      selected.add(editReservation.slotId);
+      $("formTitle").textContent = "予約を変更（日時を1つ選び直す）";
+      $("submitBtn").textContent = "この内容に変更する";
+      $("remarks").value = editReservation.remarks || "";
+    } else {
+      maxSelectable = Math.max(1, max - count); // 残り枠まで複数選択OK
+      $("formTitle").textContent = maxSelectable > 1
+        ? `新しく予約（日時を最大${maxSelectable}つまで選べます）`
+        : "新しく予約（日時を選ぶ）";
+      $("submitBtn").textContent = "この内容で予約する";
+      $("remarks").value = "";
+    }
+
+    // 選べる枠 = 空き枠 ＋（変更中ならその予約枠を先頭に）
     let slots = (STATE.slots || []).slice();
     if (editReservation && !slots.some(s => s.slotId === editReservation.slotId)) {
       slots.unshift({ slotId: editReservation.slotId, date: editReservation.date, time: editReservation.time });
     }
-    renderSlots(slots, selectedSlot);
+    renderSlots(slots);
 
     $("bookingForm").classList.remove("d-none");
     $("addBtn").classList.add("d-none");
@@ -197,29 +213,40 @@
 
   function hideForm() {
     $("bookingForm").classList.add("d-none");
-    editingSlotId = null; selectedSlot = null;
+    editingSlotId = null; selected = new Set();
   }
 
-  function renderSlots(slots, preselect) {
+  function renderSlots(slots) {
     const box = $("slots"); box.innerHTML = "";
     if (!slots.length) { $("noSlots").classList.remove("d-none"); return; }
     $("noSlots").classList.add("d-none");
     slots.forEach(s => {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn btn-outline-secondary slot-btn" + (s.slotId === preselect ? " active" : "");
+      b.dataset.slot = s.slotId;
+      b.className = "btn btn-outline-secondary slot-btn" + (selected.has(s.slotId) ? " active" : "");
       b.textContent = `${fmtDate(s.date)}  ${s.time}`;
       b.addEventListener("click", () => {
-        selectedSlot = s.slotId;
-        [...box.children].forEach(c => c.classList.remove("active"));
-        b.classList.add("active");
+        if (selected.has(s.slotId)) {
+          selected.delete(s.slotId);
+        } else {
+          if (maxSelectable === 1) selected.clear();       // 変更・単数時は入れ替え
+          if (selected.size >= maxSelectable) {
+            if (maxSelectable === 1) { /* clear済み */ }
+            else { alert(`選べるのは${maxSelectable}枠までです。`); return; }
+          }
+          selected.add(s.slotId);
+        }
+        [...box.children].forEach(c => c.classList.toggle("active", selected.has(c.dataset.slot)));
         updateSubmit();
       });
       box.appendChild(b);
     });
   }
 
-  function updateSubmit() { $("submitBtn").disabled = !selectedSlot; }
+  function updateSubmit() {
+    $("submitBtn").disabled = selected.size < 1;
+  }
 
   // 予約一覧のボタン（委任）
   $("resvList").addEventListener("click", async (e) => {
@@ -246,14 +273,17 @@
   $("bookingForm").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const out = $("result"), btn = $("submitBtn");
-    if (!selectedSlot) { out.className="mt-3 small text-danger"; out.textContent="枠を選択してください。"; return; }
+    if (selected.size < 1) { out.className="mt-3 small text-danger"; out.textContent="枠を選択してください。"; return; }
     btn.disabled = true; out.className = "mt-3 small text-muted"; out.textContent = "送信中…";
     try {
-      const payload = {
-        action: "book", userId: PROFILE.userId, idToken: liff.getIDToken(),
-        slotId: selectedSlot, remarks: $("remarks").value
-      };
-      if (editingSlotId) payload.editSlotId = editingSlotId;
+      let payload;
+      if (editingSlotId) {
+        payload = { action: "book", userId: PROFILE.userId, idToken: liff.getIDToken(),
+                    slotId: [...selected][0], editSlotId: editingSlotId, remarks: $("remarks").value };
+      } else {
+        payload = { action: "bookMulti", userId: PROFILE.userId, idToken: liff.getIDToken(),
+                    slotIds: [...selected], remarks: $("remarks").value };
+      }
       const data = await api(payload);
       if (data.ok) {
         out.className = "mt-3 small text-success fw-semibold";

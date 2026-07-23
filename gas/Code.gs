@@ -406,6 +406,48 @@ function adminSaveRules_(b) {
 }
 
 // 予約キャンセル（本人）
+// 複数枠を一度に予約（新規のみ）。合計は1人2枠まで。
+function actionBookMulti_(body) {
+  var userId = body.userId;
+  if (!userId) return { ok: false, error: 'userId がありません。' };
+  var u = findUser_(userId);
+  if (!u || !truthy_(u['有効'])) return { ok: false, error: '現在ご利用いただけません。' };
+
+  // 選択枠（重複除去）
+  var ids = [].concat(body.slotIds || []).map(function (x) { return String(x); }).filter(Boolean);
+  var seen = {}, slotIds = [];
+  ids.forEach(function (id) { if (!seen[id]) { seen[id] = true; slotIds.push(id); } });
+  if (!slotIds.length) return { ok: false, error: '予約枠を選択してください。' };
+
+  var myResvs = findResvsByUser_(userId);
+  if (myResvs.length + slotIds.length > 2) {
+    return { ok: false, error: '予約は1人2枠までです（現在' + myResvs.length + '件）。' };
+  }
+
+  var takenOthers = takenSlotIds_(userId);
+  var slotsRows = rows_(SH.slots);
+  var myHave = {};
+  myResvs.forEach(function (r) { myHave[String(r['枠ID'])] = true; });
+
+  // 先に全件バリデーション（部分的に登録しない）
+  var toAppend = [];
+  for (var i = 0; i < slotIds.length; i++) {
+    var id = slotIds[i];
+    var slot = null;
+    for (var j = 0; j < slotsRows.length; j++) { if (String(slotsRows[j]['枠ID']) === id) { slot = slotsRows[j]; break; } }
+    if (!slot || !truthy_(slot['有効'])) return { ok: false, error: '選択できない枠が含まれています。' };
+    var date = fmtDateCell_(slot['日付']), time = fmtTimeCell_(slot['時間']);
+    if (isPast_(date, time)) return { ok: false, error: '受付を終了した枠が含まれています。' };
+    if (takenOthers[id] || myHave[id]) return { ok: false, error: 'すでに埋まっている枠が含まれています。選び直してください。' };
+    toAppend.push([userId, String(u['名前'] || ''), id, date, time, String(body.remarks || ''), '受付', nowStr_(), nowStr_()]);
+    myHave[id] = true; // 同時選択内の重複防止
+  }
+
+  var sh = sheet_(SH.resv);
+  toAppend.forEach(function (row) { sh.appendRow(row); });
+  return { ok: true, created: true, count: toAppend.length };
+}
+
 function actionCancel_(body) {
   var userId = body.userId;
   if (!userId) return { ok: false, error: 'userId がありません。' };
@@ -473,6 +515,7 @@ var ADMIN_ACTIONS = {
 function route_(action, body) {
   if (action === 'init') return actionInit_(body);
   if (action === 'book') return actionBook_(body);
+  if (action === 'bookMulti') return actionBookMulti_(body);
   if (action === 'cancel') return actionCancel_(body);
   if (ADMIN_ACTIONS[action]) {
     var auth = requireAdmin_(body.accessToken);
