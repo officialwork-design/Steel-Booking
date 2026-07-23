@@ -95,6 +95,41 @@ function fmtTimeCell_(v) {
   var m = /^(\d{1,2}):(\d{2})/.exec(s);
   return m ? (('0'+m[1]).slice(-2) + ':' + m[2]) : s;
 }
+function fmtDateTimeCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm');
+  var s = String(v == null ? '' : v);
+  var m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(s);
+  return m ? (m[1] + ' ' + m[2]) : s;
+}
+
+// ヘッダー行の修正と日時列の表示形式を一度だけ整える
+function ensureSetupOnce_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    if (props.getProperty('setup_v3')) return;
+    // 旧仕様のヘッダーが残っている場合に、正しい並びへ上書き
+    fixHeaders_(SH.users);
+    fixHeaders_(SH.slots);
+    fixHeaders_(SH.resv);
+    fixHeaders_(SH.conf);
+    // 日時列の表示形式
+    formatCol_(SH.users, 4);  // 登録日時
+    formatCol_(SH.resv, 8);   // 受付日時
+    formatCol_(SH.resv, 9);   // 更新日時
+    formatCol_(SH.slots, 5);  // 作成日時
+    props.setProperty('setup_v3', '1');
+  } catch (e) {}
+}
+function fixHeaders_(def) {
+  var sh = sheet_(def);
+  sh.getRange(1, 1, 1, def.headers.length).setValues([def.headers]);
+  sh.setFrozenRows(1);
+}
+function formatCol_(def, col) {
+  var sh = sheet_(def);
+  var rows = Math.max(1, sh.getMaxRows() - 1);
+  sh.getRange(2, col, rows, 1).setNumberFormat('yyyy-mm-dd hh:mm');
+}
 function nextSlotId_() {
   var max = 0;
   rows_(SH.slots).forEach(function (s) { var n = parseInt(s['枠ID'], 10); if (!isNaN(n) && n > max) max = n; });
@@ -364,11 +399,22 @@ function adminList_() {
       return {
         userId: String(r.userId), name: rname, slotId: String(r['枠ID']),
         date: fmtDateCell_(r['日付']), time: fmtTimeCell_(r['時間']), remarks: String(r['備考'] || ''),
-        status: String(r['ステータス'] || ''), receivedAt: String(r['受付日時'] || ''), updatedAt: String(r['更新日時'] || '')
+        status: String(r['ステータス'] || ''), receivedAt: fmtDateTimeCell_(r['受付日時']), updatedAt: fmtDateTimeCell_(r['更新日時'])
       };
     }),
     rules: getRules_()
   };
+}
+
+// usersの名前を予約シートの該当行にも反映
+function syncNameToReservations_(userId, name) {
+  var sh = sheet_(SH.resv);
+  var rs = rows_(SH.resv);
+  for (var i = 0; i < rs.length; i++) {
+    if (String(rs[i].userId) === String(userId) && String(rs[i]['名前']) !== String(name)) {
+      sh.getRange(rs[i]._row, 2, 1, 1).setValue(name); // 2列目=名前
+    }
+  }
 }
 
 function optBool_(v, dflt) {
@@ -387,6 +433,7 @@ function adminSaveUser_(b) {
     if (!b.userId) return { ok: false, error: 'userId が必要です。' };
     sh.appendRow([b.userId, name, active, nowStr_(), admin]);
   }
+  syncNameToReservations_(b.userId, name);
   return { ok: true };
 }
 
@@ -566,6 +613,7 @@ function route_(action, body) {
 
 function doPost(e) {
   try {
+    ensureSetupOnce_();
     var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     return json_(route_(body.action, body));
   } catch (err) {
@@ -575,6 +623,7 @@ function doPost(e) {
 
 function doGet(e) {
   try {
+    ensureSetupOnce_();
     var p = (e && e.parameter) || {};
     if (!p.action) return json_({ ok: true, message: 'Steel-Booking GAS API is running.' });
     return json_(route_(p.action, p));
