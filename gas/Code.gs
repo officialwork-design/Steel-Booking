@@ -121,6 +121,12 @@ function isLockedDate_(dateStr) {
   return d ? (d <= todayStr_()) : false;
 }
 
+// 予約日が「昨日以前」なら終了扱い（当日はまだ表示する）
+function isFinishedDate_(dateStr) {
+  var d = fmtDateCell_(dateStr);
+  return d ? (d < todayStr_()) : false;
+}
+
 function truthy_(v) {
   if (v === true) return true;
   var s = String(v).trim().toLowerCase();
@@ -143,6 +149,11 @@ function findResv_(userId) {
 
 function findResvsByUser_(userId) {
   return rows_(SH.resv).filter(function (r) { return String(r.userId) === String(userId); });
+}
+
+// 終了(過去日)を除いた、有効な予約だけ
+function activeResvsByUser_(userId) {
+  return findResvsByUser_(userId).filter(function (r) { return !isFinishedDate_(r['日付']); });
 }
 
 // 他人に予約されている枠IDの集合
@@ -226,7 +237,7 @@ function actionInit_(body) {
     for (var r = 0; r < resvRows.length; r++) {
       var rr = resvRows[r];
       if (rr['枠ID']) takenAll[String(rr['枠ID'])] = true;
-      if (String(rr.userId) === String(userId)) mine.push(rr);
+      if (String(rr.userId) === String(userId) && !isFinishedDate_(rr['日付'])) mine.push(rr);
     }
     res.myReservations = mine.map(reservationOut_);
     // 空き枠（slotsを1回読み）: 有効・未来・誰にも取られていない
@@ -263,7 +274,7 @@ function actionBook_(body) {
   var takenOthers = takenSlotIds_(userId);
   if (takenOthers[newSlotId]) return { ok: false, error: 'その枠はすでに埋まりました。別の枠を選んでください。' };
 
-  var myResvs = findResvsByUser_(userId);
+  var myResvs = activeResvsByUser_(userId);
   // 自分が(編集対象以外で)同じ枠を既に持っていないか
   for (var k = 0; k < myResvs.length; k++) {
     if (String(myResvs[k]['枠ID']) === newSlotId && String(myResvs[k]['枠ID']) !== editSlotId) {
@@ -446,7 +457,7 @@ function actionBookMulti_(body) {
   ids.forEach(function (id) { if (!seen[id]) { seen[id] = true; slotIds.push(id); } });
   if (!slotIds.length) return { ok: false, error: '予約枠を選択してください。' };
 
-  var myResvs = findResvsByUser_(userId);
+  var myResvs = activeResvsByUser_(userId);
   if (myResvs.length + slotIds.length > 2) {
     return { ok: false, error: '予約は1人2枠までです（現在' + myResvs.length + '件）。' };
   }
