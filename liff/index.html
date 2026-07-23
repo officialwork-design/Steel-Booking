@@ -55,8 +55,9 @@
       <div id="slots" class="d-grid gap-2 mb-3"></div>
       <div id="noSlots" class="text-muted small d-none mb-3">現在、予約できる空き枠がありません。</div>
 
-      <label for="remarks" class="form-label fw-semibold">備考</label>
-      <textarea id="remarks" class="form-control mb-3" rows="3" placeholder="ご要望・連絡事項など"></textarea>
+      <label for="remarks" class="form-label fw-semibold">備考（使用する衣装を記入）<span class="text-danger">*</span></label>
+      <textarea id="remarks" class="form-control" rows="3" placeholder="使用する衣装を記入してください（例：ドレス／制服 など）"></textarea>
+      <div class="form-text mb-3">※どの衣装を使うか必ずご記入ください。</div>
 
       <div class="d-flex gap-2">
         <button id="submitBtn" type="submit" class="btn btn-line flex-grow-1 py-2 fw-semibold" disabled>予約する</button>
@@ -274,6 +275,7 @@
     ev.preventDefault();
     const out = $("result"), btn = $("submitBtn");
     if (selected.size < 1) { out.className="mt-3 small text-danger"; out.textContent="枠を選択してください。"; return; }
+    if (!$("remarks").value.trim()) { out.className="mt-3 small text-danger"; out.textContent="備考欄に、使用する衣装を記入してください。"; return; }
     btn.disabled = true; out.className = "mt-3 small text-muted"; out.textContent = "送信中…";
     try {
       let payload;
