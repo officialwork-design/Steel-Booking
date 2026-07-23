@@ -19,7 +19,7 @@ LINE → LIFF(予約画面) → GAS Web API → スプレッドシート
 ## URL
 
 - 予約画面（LINE内で開く）: https://liff.line.me/2010792348-o9YZUyTV
-- 管理画面: https://officialwork-design.github.io/Steel-Booking/admin/
+- 管理画面（管理者がLINEで開く）: https://liff.line.me/2010792348-o9YZUyTV/admin/
 
 ## スプレッドシートの構成（自動作成される）
 

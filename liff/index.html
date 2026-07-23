@@ -203,7 +203,8 @@
   $("editBtn").addEventListener("click", () => showForm(true, STATE.myReservation));
 
   $("adminBtn").addEventListener("click", () => {
-    const url = new URL("../admin/", window.location.href).href;
+    // 同じLIFF配下の管理画面をLIFFとして開く（サブパス指定で認証される）
+    const url = "https://liff.line.me/" + CONFIG.LIFF_ID + "/admin/";
     if (window.liff && liff.openWindow) liff.openWindow({ url: url, external: false });
     else window.open(url, "_blank");
   });
