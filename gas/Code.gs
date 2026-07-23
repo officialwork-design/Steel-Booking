@@ -66,6 +66,21 @@ function json_(obj) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
+// 予約系の書き込みを直列化して二重予約を防ぐ
+function withLock_(fn) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000); // 最大15秒待つ
+  } catch (e) {
+    return { ok: false, error: '只今混み合っています。少し待って再度お試しください。' };
+  }
+  try {
+    return fn();
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
 function nowStr_() {
   return Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
 }
@@ -527,9 +542,9 @@ var ADMIN_ACTIONS = {
 
 function route_(action, body) {
   if (action === 'init') return actionInit_(body);
-  if (action === 'book') return actionBook_(body);
-  if (action === 'bookMulti') return actionBookMulti_(body);
-  if (action === 'cancel') return actionCancel_(body);
+  if (action === 'book') return withLock_(function () { return actionBook_(body); });
+  if (action === 'bookMulti') return withLock_(function () { return actionBookMulti_(body); });
+  if (action === 'cancel') return withLock_(function () { return actionCancel_(body); });
   if (ADMIN_ACTIONS[action]) {
     var auth = requireAdmin_(body.accessToken);
     if (!auth.ok) return auth;
