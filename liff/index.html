@@ -27,6 +27,17 @@
   </div>
 </div>
 
+<div id="namePopup" class="popup-overlay d-none">
+  <div class="popup-box">
+    <div class="fw-semibold mb-1">お店での名前を入力してください</div>
+    <div class="text-muted small mb-2">予約管理に表示される名前です（源氏名など）。</div>
+    <input id="nameInput" class="form-control mb-3" placeholder="例：あやか" maxlength="30">
+    <button id="nameOk" class="btn btn-line w-100 py-2 fw-semibold">保存する</button>
+    <button id="nameCancel" class="btn btn-outline-secondary w-100 py-2 mt-2 d-none">キャンセル</button>
+    <div id="nameErr" class="text-danger small mt-2"></div>
+  </div>
+</div>
+
 <div class="wrap container py-4">
   <h1 class="h4 fw-bold mb-3">スチール予約</h1>
 
@@ -34,10 +45,11 @@
 
   <div id="profile" class="d-none align-items-center gap-2 mb-3">
     <img id="avatar" class="avatar rounded-circle" alt="">
-    <div>
+    <div class="flex-grow-1">
       <div class="fw-semibold" id="dispName"></div>
       <div class="text-muted small" id="dispSub"></div>
     </div>
+    <button id="changeNameBtn" class="btn btn-outline-secondary btn-sm d-none">名前を変更</button>
   </div>
 
   <div id="adminBar" class="d-none mb-3">
@@ -89,6 +101,14 @@
 
   const $ = (id) => document.getElementById(id);
   const showPopup = (msg) => { $("popupMsg").textContent = msg; $("popup").classList.remove("d-none"); };
+  function showNamePopup(current, mandatory) {
+    $("nameInput").value = current || "";
+    $("nameErr").textContent = "";
+    $("nameCancel").classList.toggle("d-none", !!mandatory);
+    $("namePopup").classList.remove("d-none");
+    setTimeout(() => $("nameInput").focus(), 100);
+  }
+  const hideNamePopup = () => $("namePopup").classList.add("d-none");
   const setStatus = (msg, kind) => {
     const el = $("status");
     el.textContent = msg;
@@ -151,10 +171,20 @@
       return;
     }
 
-    $("dispName").textContent = data.name || PROFILE.displayName || "";
+    $("dispName").textContent = data.name || "（名前未設定）";
     $("dispSub").textContent = data.isAdmin ? "登録済み（管理者）" : "登録済み";
     $("profile").classList.remove("d-none"); $("profile").classList.add("d-flex");
+    $("changeNameBtn").classList.remove("d-none");
     if (data.isAdmin) $("adminBar").classList.remove("d-none");
+
+    // 名前が未設定なら、まず入力してもらう（必須）
+    if (!data.name || !String(data.name).trim()) {
+      hideForm();
+      $("resvList").innerHTML = ""; $("addBtn").classList.add("d-none");
+      setStatus("はじめに、お店での名前を登録してください。", "err");
+      showNamePopup("", true);
+      return;
+    }
 
     // フォームは閉じた状態に
     hideForm();
@@ -316,6 +346,20 @@
   });
 
   $("popupOk").addEventListener("click", () => $("popup").classList.add("d-none"));
+
+  $("changeNameBtn").addEventListener("click", () => showNamePopup(STATE ? STATE.name : "", false));
+  $("nameCancel").addEventListener("click", hideNamePopup);
+  $("nameOk").addEventListener("click", async () => {
+    const name = $("nameInput").value.trim();
+    if (!name) { $("nameErr").textContent = "名前を入力してください。"; return; }
+    $("nameOk").disabled = true; $("nameErr").textContent = "保存中…";
+    try {
+      const d = await api({ action: "setName", userId: PROFILE.userId, displayName: PROFILE.displayName, name });
+      if (d.ok) { hideNamePopup(); await refresh(); }
+      else { $("nameErr").textContent = "❌ " + (d.error || "保存に失敗しました"); }
+    } catch (e) { $("nameErr").textContent = "❌ 通信エラー: " + (e && e.message ? e.message : e); }
+    finally { $("nameOk").disabled = false; }
+  });
 
   main();
 </script>

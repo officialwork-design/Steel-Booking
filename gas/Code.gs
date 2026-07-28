@@ -246,8 +246,8 @@ function actionInit_(body) {
   for (var i = 0; i < usersRows.length; i++) { if (String(usersRows[i].userId) === String(userId)) { u = usersRows[i]; break; } }
   if (!u) {
     var nm = String(body.displayName || '');
-    sheet_(SH.users).appendRow([userId, nm, true, nowStr_(), false, nm]);
-    u = { userId: userId, '名前': nm, '有効': true, '管理者': false, 'LINE名': nm };
+    sheet_(SH.users).appendRow([userId, '', true, nowStr_(), false, nm]);  // 名前は本人が後で入力
+    u = { userId: userId, '名前': '', '有効': true, '管理者': false, 'LINE名': nm };
   }
   var active = truthy_(u['有効']);
   var res = {
@@ -293,6 +293,7 @@ function actionBook_(body) {
   if (!userId) return { ok: false, error: 'userId がありません。' };
   var u = findUser_(userId);
   if (!u || !truthy_(u['有効'])) return { ok: false, error: '現在ご利用いただけません。' };
+  if (!String(u['名前'] || '').trim()) return { ok: false, error: '先にお店での名前を登録してください。' };
 
   var newSlotId = String(body.slotId || '');
   if (!newSlotId) return { ok: false, error: '予約枠を選択してください。' };
@@ -498,6 +499,7 @@ function actionBookMulti_(body) {
   if (!userId) return { ok: false, error: 'userId がありません。' };
   var u = findUser_(userId);
   if (!u || !truthy_(u['有効'])) return { ok: false, error: '現在ご利用いただけません。' };
+  if (!String(u['名前'] || '').trim()) return { ok: false, error: '先にお店での名前を登録してください。' };
   if (!String(body.remarks || '').trim()) return { ok: false, error: '備考欄に、使用する衣装を記入してください。' };
 
   // 選択枠（重複除去）
@@ -533,6 +535,23 @@ function actionBookMulti_(body) {
   var sh = sheet_(SH.resv);
   toAppend.forEach(function (row) { sh.appendRow(row); });
   return { ok: true, created: true, count: toAppend.length };
+}
+
+// 本人が「お店での名前」を設定/変更
+function actionSetName_(body) {
+  var userId = body.userId;
+  if (!userId) return { ok: false, error: 'userId がありません。' };
+  var name = String(body.name || '').trim();
+  if (!name) return { ok: false, error: '名前を入力してください。' };
+  var sh = sheet_(SH.users);
+  var u = findUser_(userId);
+  if (!u) {
+    sh.appendRow([userId, name, true, nowStr_(), false, String(body.displayName || '')]);
+  } else {
+    sh.getRange(u._row, 2, 1, 1).setValue(name);
+  }
+  syncNameToReservations_(userId, name);
+  return { ok: true, name: name };
 }
 
 function actionCancel_(body) {
@@ -605,6 +624,7 @@ function route_(action, body) {
   if (action === 'book') return withLock_(function () { return actionBook_(body); });
   if (action === 'bookMulti') return withLock_(function () { return actionBookMulti_(body); });
   if (action === 'cancel') return withLock_(function () { return actionCancel_(body); });
+  if (action === 'setName') return actionSetName_(body);
   if (ADMIN_ACTIONS[action]) {
     var auth = requireAdmin_(body.accessToken);
     if (!auth.ok) return auth;
