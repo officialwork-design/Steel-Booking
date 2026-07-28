@@ -254,7 +254,7 @@ function actionInit_(body) {
     ok: true,
     registered: active,
     blocked: !active,
-    name: String(u['名前'] || body.displayName || ''),
+    name: String(u['名前'] || ''),   // 未設定は空で返し、アプリ側で名前入力を促す
     userId: String(userId),
     isAdmin: !!truthy_(u['管理者']),
     rules: '',
