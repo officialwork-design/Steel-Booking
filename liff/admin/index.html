@@ -152,7 +152,7 @@
         <div class="d-flex align-items-center gap-2 mt-2">
           <span class="small text-muted">状態</span>
           <select class="form-select form-select-sm w-auto" data-status-user="${esc(r.userId)}">
-            ${["受付","確定","完了","遅刻","欠席"].map(o=>`<option ${r.status===o?"selected":""}>${o}</option>`).join("")}
+            ${["受付","確定","完了","遅刻","欠席","キャンセル"].map(o=>`<option ${r.status===o?"selected":""}>${o}</option>`).join("")}
           </select>
         </div>
         <div class="small text-muted mt-1">受付: ${esc(r.receivedAt)}</div>

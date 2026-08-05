@@ -19,7 +19,7 @@ var DEFAULT_SHEET_ID = '1neHxod-oOulSHjkbd41hoZ9emkkJPtHvvaQgO6wNvoE';
 var CHANNEL_ID = '2010792348';
 
 var SH = {
-  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者', 'LINE名', '遅刻', '欠席'] },
+  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者', 'LINE名', '遅刻', '欠席', 'キャンセル'] },
   slots: { name: 'slots', headers: ['枠ID', '日付', '時間', '有効', '作成日時'] },
   resv:  { name: '予約',  headers: ['userId', '名前', '枠ID', '日付', '時間', '備考', 'ステータス', '受付日時', '更新日時'] },
   conf:  { name: '設定',  headers: ['キー', '値'] }
@@ -126,20 +126,21 @@ function カレンダー再生成() {
 // 各ユーザーの遅刻・欠席回数を予約シートから集計し、usersシート(7=遅刻,8=欠席列)に書き込む
 function recountStatus_() {
   var resv = rows_(SH.resv);
-  var late = {}, absent = {};
+  var late = {}, absent = {}, cancel = {};
   resv.forEach(function (r) {
     var uid = String(r.userId), st = String(r['ステータス'] || '');
     if (st === '遅刻') late[uid] = (late[uid] || 0) + 1;
     else if (st === '欠席') absent[uid] = (absent[uid] || 0) + 1;
+    else if (st === 'キャンセル') cancel[uid] = (cancel[uid] || 0) + 1;
   });
   var sh = sheet_(SH.users);
   var us = rows_(SH.users);
   if (!us.length) return;
   var vals = us.map(function (u) {
     var uid = String(u.userId);
-    return [late[uid] || 0, absent[uid] || 0];
+    return [late[uid] || 0, absent[uid] || 0, cancel[uid] || 0];
   });
-  sh.getRange(2, 7, us.length, 2).setValues(vals); // 7列目=遅刻, 8列目=欠席
+  sh.getRange(2, 7, us.length, 3).setValues(vals); // 7=遅刻, 8=欠席, 9=キャンセル
 }
 
 // エディタから手動実行する用
@@ -186,7 +187,7 @@ function fmtDateTimeCell_(v) {
 function ensureSetupOnce_() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty('setup_v6')) return;
+    if (props.getProperty('setup_v7')) return;
     // 旧仕様のヘッダーが残っている場合に、正しい並びへ上書き
     fixHeaders_(SH.users);
     fixHeaders_(SH.slots);
@@ -199,7 +200,7 @@ function ensureSetupOnce_() {
     formatCol_(SH.slots, 5);  // 作成日時
     try { rebuildMatrix_(); } catch (e) {}
     try { recountStatus_(); } catch (e) {}
-    props.setProperty('setup_v6', '1');
+    props.setProperty('setup_v7', '1');
   } catch (e) {}
 }
 function fixHeaders_(def) {
