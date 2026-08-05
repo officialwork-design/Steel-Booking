@@ -77,16 +77,25 @@ function fmtDateHeader_(d) {
 function rebuildMatrix_() {
   var resv = rows_(SH.resv);
   var users = rows_(SH.users);
-  var nameOf = {};
-  users.forEach(function (u) { nameOf[String(u.userId)] = String(u['名前'] || u['LINE名'] || ''); });
 
-  var dateSet = {}, byUser = {}, userOrder = [];
+  // 全ユーザーを行に（予約が無くても表示）
+  var nameOf = {}, userOrder = [];
+  users.forEach(function (u) {
+    var uid = String(u.userId);
+    if (!uid) return;
+    nameOf[uid] = String(u['名前'] || u['LINE名'] || '(名前未設定)');
+    userOrder.push(uid);
+  });
+
+  // 予約日を集計
+  var dateSet = {}, byUser = {};
   resv.forEach(function (r) {
     var uid = String(r.userId), d = fmtDateCell_(r['日付']);
     if (!d) return;
     dateSet[d] = true;
-    if (!byUser[uid]) { byUser[uid] = {}; userOrder.push(uid); }
+    if (!byUser[uid]) byUser[uid] = {};
     byUser[uid][d] = true;
+    if (!(uid in nameOf)) { nameOf[uid] = String(r['名前'] || uid); userOrder.push(uid); } // usersに無い予約も一応表示
   });
   var dates = Object.keys(dateSet).sort();
 
