@@ -67,6 +67,48 @@ function json_(obj) {
 }
 
 // 予約系の書き込みを直列化して二重予約を防ぐ
+// 予約カレンダーシートを再構築（行=ユーザー, 列=日付, 予約日に○）
+function fmtDateHeader_(d) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d);
+  if (!m) return d;
+  var wd = ['日','月','火','水','木','金','土'][new Date(+m[1], +m[2]-1, +m[3]).getDay()];
+  return (+m[2]) + '/' + (+m[3]) + '(' + wd + ')';
+}
+function rebuildMatrix_() {
+  var resv = rows_(SH.resv);
+  var users = rows_(SH.users);
+  var nameOf = {};
+  users.forEach(function (u) { nameOf[String(u.userId)] = String(u['名前'] || u['LINE名'] || ''); });
+
+  var dateSet = {}, byUser = {}, userOrder = [];
+  resv.forEach(function (r) {
+    var uid = String(r.userId), d = fmtDateCell_(r['日付']);
+    if (!d) return;
+    dateSet[d] = true;
+    if (!byUser[uid]) { byUser[uid] = {}; userOrder.push(uid); }
+    byUser[uid][d] = true;
+  });
+  var dates = Object.keys(dateSet).sort();
+
+  var header = ['名前'].concat(dates.map(fmtDateHeader_));
+  var grid = [header];
+  userOrder.forEach(function (uid) {
+    var row = [nameOf[uid] || uid];
+    dates.forEach(function (d) { row.push(byUser[uid][d] ? '○' : ''); });
+    grid.push(row);
+  });
+
+  var ss = ss_();
+  var sh = ss.getSheetByName('予約カレンダー');
+  if (!sh) sh = ss.insertSheet('予約カレンダー');
+  sh.clear();
+  sh.getRange(1, 1, grid.length, header.length).setValues(grid);
+  sh.setFrozenRows(1);
+  sh.setFrozenColumns(1);
+  sh.getRange(1, 1, grid.length, header.length).setHorizontalAlignment('center');
+  sh.getRange(1, 1, 1, header.length).setFontWeight('bold');
+}
+
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
   try {
@@ -106,7 +148,7 @@ function fmtDateTimeCell_(v) {
 function ensureSetupOnce_() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty('setup_v4')) return;
+    if (props.getProperty('setup_v5')) return;
     // 旧仕様のヘッダーが残っている場合に、正しい並びへ上書き
     fixHeaders_(SH.users);
     fixHeaders_(SH.slots);
@@ -117,7 +159,8 @@ function ensureSetupOnce_() {
     formatCol_(SH.resv, 8);   // 受付日時
     formatCol_(SH.resv, 9);   // 更新日時
     formatCol_(SH.slots, 5);  // 作成日時
-    props.setProperty('setup_v4', '1');
+    try { rebuildMatrix_(); } catch (e) {}
+    props.setProperty('setup_v5', '1');
   } catch (e) {}
 }
 function fixHeaders_(def) {
@@ -620,17 +663,26 @@ var ADMIN_ACTIONS = {
 };
 
 function route_(action, body) {
+  var result;
   if (action === 'init') return actionInit_(body);
-  if (action === 'book') return withLock_(function () { return actionBook_(body); });
-  if (action === 'bookMulti') return withLock_(function () { return actionBookMulti_(body); });
-  if (action === 'cancel') return withLock_(function () { return actionCancel_(body); });
-  if (action === 'setName') return actionSetName_(body);
-  if (ADMIN_ACTIONS[action]) {
+  else if (action === 'book') result = withLock_(function () { return actionBook_(body); });
+  else if (action === 'bookMulti') result = withLock_(function () { return actionBookMulti_(body); });
+  else if (action === 'cancel') result = withLock_(function () { return actionCancel_(body); });
+  else if (action === 'setName') result = actionSetName_(body);
+  else if (ADMIN_ACTIONS[action]) {
     var auth = requireAdmin_(body.accessToken);
     if (!auth.ok) return auth;
-    return ADMIN_ACTIONS[action](body);
+    result = ADMIN_ACTIONS[action](body);
+  } else {
+    return { ok: false, error: '未対応のaction: ' + action };
   }
-  return { ok: false, error: '未対応のaction: ' + action };
+
+  // 予約に影響する書き込みが成功したらカレンダーを再構築
+  var MATRIX = { book: 1, bookMulti: 1, cancel: 1, setName: 1, admin_saveUser: 1, admin_deleteReservation: 1 };
+  if (result && result.ok && MATRIX[action]) {
+    try { rebuildMatrix_(); } catch (e) {}
+  }
+  return result;
 }
 
 function doPost(e) {
