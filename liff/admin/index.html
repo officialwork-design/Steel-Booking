@@ -105,11 +105,21 @@
 
   async function post(payload) {
     const token = (window.liff && liff.getAccessToken) ? liff.getAccessToken() : null;
-    const res = await fetch(CONFIG.GAS_ENDPOINT, {
-      method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
-      body: JSON.stringify(Object.assign({ accessToken: token }, payload))
-    });
-    return res.json();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 25000); // 25秒でタイムアウト
+    try {
+      const res = await fetch(CONFIG.GAS_ENDPOINT, {
+        method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
+        body: JSON.stringify(Object.assign({ accessToken: token }, payload)),
+        signal: ctrl.signal
+      });
+      return await res.json();
+    } catch (e) {
+      if (e.name === "AbortError") return { ok:false, error:"タイムアウトしました。通信環境を確認して再読み込みしてください。" };
+      return { ok:false, error:"通信エラー: " + (e && e.message ? e.message : e) };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async function boot() {
