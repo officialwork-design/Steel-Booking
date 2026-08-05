@@ -305,6 +305,7 @@ function actionInit_(body) {
     var nm = String(body.displayName || '');
     sheet_(SH.users).appendRow([userId, '', true, nowStr_(), false, nm]);  // 名前は本人が後で入力
     u = { userId: userId, '名前': '', '有効': true, '管理者': false, 'LINE名': nm };
+    try { rebuildMatrix_(); } catch (e) {}  // 新規登録もカレンダーに反映
   }
   var active = truthy_(u['有効']);
   var res = {
