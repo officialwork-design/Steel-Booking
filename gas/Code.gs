@@ -109,6 +109,11 @@ function rebuildMatrix_() {
   sh.getRange(1, 1, 1, header.length).setFontWeight('bold');
 }
 
+// エディタから手動実行する用（末尾に _ を付けないこと）
+function カレンダー再生成() {
+  rebuildMatrix_();
+}
+
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
   try {
