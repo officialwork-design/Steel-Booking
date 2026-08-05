@@ -19,7 +19,7 @@ var DEFAULT_SHEET_ID = '1neHxod-oOulSHjkbd41hoZ9emkkJPtHvvaQgO6wNvoE';
 var CHANNEL_ID = '2010792348';
 
 var SH = {
-  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者', 'LINE名'] },
+  users: { name: 'users', headers: ['userId', '名前', '有効', '登録日時', '管理者', 'LINE名', '遅刻', '欠席'] },
   slots: { name: 'slots', headers: ['枠ID', '日付', '時間', '有効', '作成日時'] },
   resv:  { name: '予約',  headers: ['userId', '名前', '枠ID', '日付', '時間', '備考', 'ステータス', '受付日時', '更新日時'] },
   conf:  { name: '設定',  headers: ['キー', '値'] }
@@ -123,6 +123,30 @@ function カレンダー再生成() {
   rebuildMatrix_();
 }
 
+// 各ユーザーの遅刻・欠席回数を予約シートから集計し、usersシート(7=遅刻,8=欠席列)に書き込む
+function recountStatus_() {
+  var resv = rows_(SH.resv);
+  var late = {}, absent = {};
+  resv.forEach(function (r) {
+    var uid = String(r.userId), st = String(r['ステータス'] || '');
+    if (st === '遅刻') late[uid] = (late[uid] || 0) + 1;
+    else if (st === '欠席') absent[uid] = (absent[uid] || 0) + 1;
+  });
+  var sh = sheet_(SH.users);
+  var us = rows_(SH.users);
+  if (!us.length) return;
+  var vals = us.map(function (u) {
+    var uid = String(u.userId);
+    return [late[uid] || 0, absent[uid] || 0];
+  });
+  sh.getRange(2, 7, us.length, 2).setValues(vals); // 7列目=遅刻, 8列目=欠席
+}
+
+// エディタから手動実行する用
+function 遅刻欠席を再集計() {
+  recountStatus_();
+}
+
 function withLock_(fn) {
   var lock = LockService.getScriptLock();
   try {
@@ -162,7 +186,7 @@ function fmtDateTimeCell_(v) {
 function ensureSetupOnce_() {
   try {
     var props = PropertiesService.getScriptProperties();
-    if (props.getProperty('setup_v5')) return;
+    if (props.getProperty('setup_v6')) return;
     // 旧仕様のヘッダーが残っている場合に、正しい並びへ上書き
     fixHeaders_(SH.users);
     fixHeaders_(SH.slots);
@@ -174,7 +198,8 @@ function ensureSetupOnce_() {
     formatCol_(SH.resv, 9);   // 更新日時
     formatCol_(SH.slots, 5);  // 作成日時
     try { rebuildMatrix_(); } catch (e) {}
-    props.setProperty('setup_v5', '1');
+    try { recountStatus_(); } catch (e) {}
+    props.setProperty('setup_v6', '1');
   } catch (e) {}
 }
 function fixHeaders_(def) {
@@ -696,6 +721,10 @@ function route_(action, body) {
   var MATRIX = { book: 1, bookMulti: 1, cancel: 1, setName: 1, admin_saveUser: 1, admin_deleteReservation: 1 };
   if (result && result.ok && MATRIX[action]) {
     try { rebuildMatrix_(); } catch (e) {}
+  }
+  var RECOUNT = { admin_setStatus: 1, admin_deleteReservation: 1 };
+  if (result && result.ok && RECOUNT[action]) {
+    try { recountStatus_(); } catch (e) {}
   }
   return result;
 }
