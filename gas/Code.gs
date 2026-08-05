@@ -103,7 +103,7 @@ function rebuildMatrix_() {
   var grid = [header];
   userOrder.forEach(function (uid) {
     var row = [nameOf[uid] || uid];
-    dates.forEach(function (d) { row.push(byUser[uid][d] ? '○' : ''); });
+    dates.forEach(function (d) { row.push((byUser[uid] && byUser[uid][d]) ? '○' : ''); });
     grid.push(row);
   });
 
